@@ -1,5 +1,6 @@
 import { Link, useLocation } from "react-router";
 import {
+  LayoutDashboard,
   Upload,
   BarChart3,
   FolderTree,
@@ -11,6 +12,7 @@ import {
 } from "lucide-react";
 
 const NAV_ITEMS = [
+  { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
   { icon: Upload, label: "Import", path: "/import" },
   { icon: BarChart3, label: "Stock", path: "/stock" },
   { icon: FolderTree, label: "Categories", path: "/categories" },

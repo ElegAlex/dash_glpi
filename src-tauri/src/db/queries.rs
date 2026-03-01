@@ -9,7 +9,7 @@ use crate::commands::stock::{
 
 // ─── Helpers privés ───────────────────────────────────────────────────────────
 
-fn get_active_import_id(conn: &Connection) -> Result<i64, rusqlite::Error> {
+pub(crate) fn get_active_import_id(conn: &Connection) -> Result<i64, rusqlite::Error> {
     conn.query_row(
         "SELECT id FROM imports WHERE is_active = 1 ORDER BY id DESC LIMIT 1",
         [],

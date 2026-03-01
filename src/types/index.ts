@@ -14,3 +14,4 @@ export type {
   CategoryTree,
 } from "./kpi";
 export type { AppConfig, ImportHistory } from "./config";
+export type * from './dashboard';

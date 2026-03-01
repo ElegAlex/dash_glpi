@@ -78,6 +78,8 @@ pub fn run() {
             commands::search::search_tickets,
             // Analytics
             commands::analytics::predict_workload,
+            // Dashboard KPI
+            commands::dashboard::get_dashboard_kpi,
         ])
         .run(tauri::generate_context!())
         .expect("Erreur au lancement de l'application");
@@ -433,5 +435,26 @@ mod e2e_tests {
         assert!(bytes.len() > 4, "XLSX bytes should be non-trivial");
         assert_eq!(bytes[0], 0x50, "First byte should be 0x50 (P)");
         assert_eq!(bytes[1], 0x4B, "Second byte should be 0x4B (K)");
+    }
+
+    // ── Dashboard KPI E2E Test ───────────────────────────────────────────────
+
+    #[test]
+    fn test_e2e_dashboard_kpi() {
+        let conn = match setup_with_real_data() {
+            Some(c) => c,
+            None => return,
+        };
+        let kpi = crate::analyzer::dashboard::build_dashboard_kpi(&conn, 1, &None, &None)
+            .expect("build_dashboard_kpi failed");
+        assert!(kpi.meta.total_tickets > 0);
+        assert!(kpi.resolution.mttr_global_jours > 0.0);
+        assert!(kpi.resolution.echantillon > 0);
+        assert!(!kpi.volumes.par_mois.is_empty());
+        assert!(kpi.taux_n1.objectif_itil == 75.0);
+        assert!(
+            kpi.taux_n1.n1_strict.pourcentage >= 0.0
+                && kpi.taux_n1.n1_strict.pourcentage <= 100.0
+        );
     }
 }

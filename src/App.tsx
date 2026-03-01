@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from "react-router";
 import Layout from "./components/layout/Layout";
+import DashboardPage from "./pages/DashboardPage";
 import ImportPage from "./pages/ImportPage";
 import StockPage from "./pages/StockPage";
 import TechnicianDetail from "./pages/TechnicianDetail";
@@ -14,7 +15,8 @@ function App() {
   return (
     <Routes>
       <Route element={<Layout />}>
-        <Route index element={<Navigate to="/import" replace />} />
+        <Route index element={<Navigate to="/dashboard" replace />} />
+        <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/import" element={<ImportPage />} />
         <Route path="/stock" element={<StockPage />} />
         <Route path="/stock/:technicien" element={<TechnicianDetail />} />
