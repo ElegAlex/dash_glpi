@@ -1,0 +1,67 @@
+[package]
+name = "glpi-dashboard"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "glpi_dashboard_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.5", features = [] }
+
+[dependencies]
+# Tauri core + plugins
+tauri = { version = "2.10", features = [] }
+tauri-plugin-dialog = "2.4"
+tauri-plugin-fs = "2.4"
+tauri-plugin-notification = "2.3"
+tauri-plugin-shell = "2.2"
+
+# Sérialisation
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# CSV parsing
+csv = "1.4"
+
+# Dates
+chrono = { version = "0.4", features = ["serde"] }
+
+# SQLite — 0.38.0 bundle SQLite 3.51.1, FTS5 activé par défaut avec bundled
+rusqlite = { version = "0.38", features = ["bundled", "fallible_uint", "cache"] }
+
+# Erreurs
+thiserror = "2"
+
+# NLP / text mining
+regex = "1"
+rust-stemmers = "1.2"
+unicode-normalization = "0.1"
+charabia = { version = "0.9", default-features = false }
+sprs = "0.11"
+
+# Analytics / ML
+linfa = "0.8.1"
+linfa-clustering = "0.8.1"
+linfa-reduction = "0.8.1"
+ndarray = "0.16"
+kneed = "1.0"
+augurs = "0.10.1"
+
+# Export Excel
+rust_xlsxwriter = { version = "0.93", features = ["serde", "chrono", "zlib", "ryu"] }
+
+# ZIP archive (export_all_plans_zip)
+zip = "2"
+strsim = "0.11"
+
+# Logging
+log = "0.4"
+env_logger = "0.11"
+
+# Async
+tokio = { version = "1", features = ["full"] }
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
