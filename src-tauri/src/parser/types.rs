@@ -28,6 +28,7 @@ pub struct GlpiTicketNormalized {
     pub statut: String,
     pub type_ticket: String,
     pub priorite: Option<i32>,
+    pub priorite_label: Option<String>,
     pub urgence: Option<i32>,
     pub demandeur: String,
     pub date_ouverture: String,

@@ -12,7 +12,7 @@ pub fn bulk_insert_tickets(
     {
         let mut stmt = tx.prepare_cached(
             "INSERT OR REPLACE INTO tickets (
-                id, import_id, titre, statut, type_ticket, priorite, urgence,
+                id, import_id, titre, statut, type_ticket, priorite, priorite_label, urgence,
                 demandeur, date_ouverture, derniere_modification, nombre_suivis,
                 suivis_description, solution, taches_description, intervention_fournisseur,
                 techniciens, groupes,
@@ -22,15 +22,15 @@ pub fn bulk_insert_tickets(
                 est_vivant, anciennete_jours, inactivite_jours, date_cloture_approx,
                 action_recommandee, motif_classification
             ) VALUES (
-                ?1, ?2, ?3, ?4, ?5, ?6, ?7,
-                ?8, ?9, ?10, ?11,
-                ?12, ?13, ?14, ?15,
-                ?16, ?17,
-                ?18, ?19,
-                ?20, ?21, ?22,
-                ?23, ?24, ?25,
-                ?26, ?27, ?28, ?29,
-                ?30, ?31
+                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8,
+                ?9, ?10, ?11, ?12,
+                ?13, ?14, ?15, ?16,
+                ?17, ?18,
+                ?19, ?20,
+                ?21, ?22, ?23,
+                ?24, ?25, ?26,
+                ?27, ?28, ?29, ?30,
+                ?31, ?32
             )",
         )?;
 
@@ -42,6 +42,7 @@ pub fn bulk_insert_tickets(
                 t.statut,
                 t.type_ticket,
                 t.priorite,
+                t.priorite_label,
                 t.urgence,
                 t.demandeur,
                 t.date_ouverture,

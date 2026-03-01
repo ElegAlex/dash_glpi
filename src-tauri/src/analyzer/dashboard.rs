@@ -174,18 +174,6 @@ pub struct VentilationItem {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-fn priority_label(p: i32) -> &'static str {
-    match p {
-        1 => "Tres haute",
-        2 => "Haute",
-        3 => "Moyenne",
-        4 => "Basse",
-        5 => "Tres basse",
-        6 => "Majeure",
-        _ => "Inconnue",
-    }
-}
-
 fn round1(v: f64) -> f64 {
     (v * 10.0).round() / 10.0
 }
@@ -475,16 +463,16 @@ fn build_resolution(
     let et = round1(ecart_type(&durations));
 
     // MTTR by type
-    let par_type = build_mttr_by_dimension(conn, import_id, "type_ticket", date_clause, date_params, echantillon, false)?;
+    let par_type = build_mttr_by_dimension(conn, import_id, "type_ticket", date_clause, date_params, echantillon)?;
 
-    // MTTR by priority
-    let par_priorite = build_mttr_by_dimension(conn, import_id, "priorite", date_clause, date_params, echantillon, true)?;
+    // MTTR by priority (use priorite_label for text display)
+    let par_priorite = build_mttr_by_dimension(conn, import_id, "priorite_label", date_clause, date_params, echantillon)?;
 
     // MTTR by groupe
-    let par_groupe = build_mttr_by_dimension(conn, import_id, "groupe_principal", date_clause, date_params, echantillon, false)?;
+    let par_groupe = build_mttr_by_dimension(conn, import_id, "groupe_principal", date_clause, date_params, echantillon)?;
 
     // MTTR by technicien
-    let par_technicien = build_mttr_by_dimension(conn, import_id, "technicien_principal", date_clause, date_params, echantillon, false)?;
+    let par_technicien = build_mttr_by_dimension(conn, import_id, "technicien_principal", date_clause, date_params, echantillon)?;
 
     // Distribution by tranches
     let distribution_tranches = build_pec_distribution(&durations, echantillon);
@@ -514,7 +502,6 @@ fn build_mttr_by_dimension(
     date_clause: &str,
     date_params: &[String],
     total_echantillon: i64,
-    is_priority: bool,
 ) -> Result<Vec<MttrParDimension>, rusqlite::Error> {
     let sql = format!(
         "SELECT {col},
@@ -579,14 +566,14 @@ fn build_mttr_by_dimension(
         if dur < 0.0 {
             continue;
         }
-        let key = value_to_label(&val, is_priority);
+        let key = value_to_label(&val);
         durations_by_key.entry(key).or_default().push(dur);
     }
 
     let mut results = Vec::new();
     for row in rows {
         let (val, avg_dur, cnt) = row?;
-        let label = value_to_label(&val, is_priority);
+        let label = value_to_label(&val);
         let med = durations_by_key
             .get(&label)
             .map(|v| round1(percentile(v, 50.0)))
@@ -603,23 +590,11 @@ fn build_mttr_by_dimension(
     Ok(results)
 }
 
-fn value_to_label(val: &rusqlite::types::Value, is_priority: bool) -> String {
+fn value_to_label(val: &rusqlite::types::Value) -> String {
     match val {
-        rusqlite::types::Value::Integer(i) => {
-            if is_priority {
-                priority_label(*i as i32).to_string()
-            } else {
-                i.to_string()
-            }
-        }
+        rusqlite::types::Value::Integer(i) => i.to_string(),
         rusqlite::types::Value::Text(s) => s.clone(),
-        rusqlite::types::Value::Real(f) => {
-            if is_priority {
-                priority_label(*f as i32).to_string()
-            } else {
-                format!("{:.1}", f)
-            }
-        }
+        rusqlite::types::Value::Real(f) => format!("{:.1}", f),
         _ => "Inconnu".to_string(),
     }
 }
@@ -1081,14 +1056,25 @@ fn build_ventilation_priorite(
 ) -> Result<Vec<VentilationItem>, rusqlite::Error> {
     let sql = format!(
         "SELECT
-            priorite,
+            COALESCE(priorite_label, 'Non renseigne') AS prio_label,
             COUNT(*) AS total,
             SUM(CASE WHEN est_vivant = 1 THEN 1 ELSE 0 END) AS vivants,
             SUM(CASE WHEN est_vivant = 0 THEN 1 ELSE 0 END) AS termines
          FROM tickets
          WHERE import_id = ?{date_clause}
-         GROUP BY priorite
-         ORDER BY priorite",
+         GROUP BY prio_label
+         ORDER BY
+            CASE COALESCE(priorite_label, '')
+                WHEN 'Majeure'    THEN 1
+                WHEN 'Tres haute' THEN 2
+                WHEN 'Très haute' THEN 2
+                WHEN 'Haute'      THEN 3
+                WHEN 'Moyenne'    THEN 4
+                WHEN 'Basse'      THEN 5
+                WHEN 'Tres basse' THEN 6
+                WHEN 'Très basse' THEN 6
+                ELSE 7
+            END",
         date_clause = date_clause,
     );
 
@@ -1114,14 +1100,10 @@ fn build_ventilation_priorite(
     let rows = stmt.query_map(
         rusqlite::params_from_iter(all_params.iter().map(|b| b.as_ref())),
         |row| {
-            let prio: Option<i32> = row.get(0)?;
+            let label: String = row.get(0)?;
             let total: i64 = row.get(1)?;
             let vivants: i64 = row.get(2)?;
             let termines: i64 = row.get(3)?;
-            let label = match prio {
-                Some(p) => priority_label(p).to_string(),
-                None => "Non renseigné".to_string(),
-            };
             Ok(VentilationItem {
                 label,
                 total,
@@ -1196,29 +1178,29 @@ mod tests {
 
         // Insert test tickets
         // 3 vivants, 7 termines
-        let tickets = vec![
-            // (id, statut, type_ticket, priorite, date_ouverture, derniere_modification, techniciens, technicien_principal, groupe_principal, est_vivant, anciennete_jours, date_cloture_approx, nombre_suivis, categorie)
-            (1, "En cours", "Incident", 3, "2025-01-10T10:00:00", "2025-01-15T10:00:00", r#"["Alice"]"#, "Alice", "Support N1", 1, 50, None::<&str>, 0, Some("Réseau")),
-            (2, "En cours", "Demande", 4, "2025-02-01T08:00:00", "2025-02-10T08:00:00", r#"["Bob"]"#, "Bob", "Support N2", 1, 30, None, 2, Some("Logiciel")),
-            (3, "En attente", "Incident", 2, "2025-03-01T09:00:00", "2025-03-05T09:00:00", r#"["Alice","Bob"]"#, "Alice", "Support N1", 1, 10, None, 1, None),
+        // (id, statut, type_ticket, priorite, priorite_label, date_ouverture, derniere_modification, techniciens, technicien_principal, groupe_principal, est_vivant, anciennete_jours, date_cloture_approx, nombre_suivis, categorie)
+        let tickets: Vec<(i32, &str, &str, i32, &str, &str, &str, &str, &str, &str, i32, i32, Option<&str>, i32, Option<&str>)> = vec![
+            (1, "En cours", "Incident", 3, "Moyenne", "2025-01-10T10:00:00", "2025-01-15T10:00:00", r#"["Alice"]"#, "Alice", "Support N1", 1, 50, None, 0, Some("Réseau")),
+            (2, "En cours", "Demande", 4, "Basse", "2025-02-01T08:00:00", "2025-02-10T08:00:00", r#"["Bob"]"#, "Bob", "Support N2", 1, 30, None, 2, Some("Logiciel")),
+            (3, "En attente", "Incident", 2, "Haute", "2025-03-01T09:00:00", "2025-03-05T09:00:00", r#"["Alice","Bob"]"#, "Alice", "Support N1", 1, 10, None, 1, None),
 
             // Terminated tickets
-            (4, "Résolu", "Incident", 3, "2025-01-05T10:00:00", "2025-01-12T10:00:00", r#"["Alice"]"#, "Alice", "Support N1", 0, 0, Some("2025-01-12T10:00:00"), 1, Some("Réseau")),
-            (5, "Clos", "Demande", 4, "2025-01-20T08:00:00", "2025-01-22T08:00:00", r#"["Bob"]"#, "Bob", "Support N2", 0, 0, Some("2025-01-22T08:00:00"), 0, Some("Logiciel")),
-            (6, "Résolu", "Incident", 3, "2025-02-10T09:00:00", "2025-02-20T09:00:00", r#"["Alice","Charlie"]"#, "Alice", "Support N1", 0, 0, Some("2025-02-20T09:00:00"), 3, Some("Réseau")),
-            (7, "Clos", "Incident", 2, "2025-02-15T10:00:00", "2025-02-16T10:00:00", r#"["Charlie"]"#, "Charlie", "Support N1", 0, 0, Some("2025-02-16T10:00:00"), 0, None),
-            (8, "Résolu", "Demande", 4, "2025-03-01T08:00:00", "2025-03-10T08:00:00", r#"["Bob"]"#, "Bob", "Support N2", 0, 0, Some("2025-03-10T08:00:00"), 1, Some("Logiciel")),
-            (9, "Clos", "Incident", 3, "2025-03-05T10:00:00", "2025-03-08T10:00:00", r#"[]"#, "", "", 0, 0, Some("2025-03-08T10:00:00"), 0, None),
-            (10, "Clos", "Demande", 5, "2025-03-10T09:00:00", "2025-03-15T09:00:00", "[]", "", "Support N1", 0, 0, Some("2025-03-15T09:00:00"), 0, Some("Réseau")),
+            (4, "Résolu", "Incident", 3, "Moyenne", "2025-01-05T10:00:00", "2025-01-12T10:00:00", r#"["Alice"]"#, "Alice", "Support N1", 0, 0, Some("2025-01-12T10:00:00"), 1, Some("Réseau")),
+            (5, "Clos", "Demande", 4, "Basse", "2025-01-20T08:00:00", "2025-01-22T08:00:00", r#"["Bob"]"#, "Bob", "Support N2", 0, 0, Some("2025-01-22T08:00:00"), 0, Some("Logiciel")),
+            (6, "Résolu", "Incident", 3, "Moyenne", "2025-02-10T09:00:00", "2025-02-20T09:00:00", r#"["Alice","Charlie"]"#, "Alice", "Support N1", 0, 0, Some("2025-02-20T09:00:00"), 3, Some("Réseau")),
+            (7, "Clos", "Incident", 2, "Haute", "2025-02-15T10:00:00", "2025-02-16T10:00:00", r#"["Charlie"]"#, "Charlie", "Support N1", 0, 0, Some("2025-02-16T10:00:00"), 0, None),
+            (8, "Résolu", "Demande", 4, "Basse", "2025-03-01T08:00:00", "2025-03-10T08:00:00", r#"["Bob"]"#, "Bob", "Support N2", 0, 0, Some("2025-03-10T08:00:00"), 1, Some("Logiciel")),
+            (9, "Clos", "Incident", 3, "Moyenne", "2025-03-05T10:00:00", "2025-03-08T10:00:00", r#"[]"#, "", "", 0, 0, Some("2025-03-08T10:00:00"), 0, None),
+            (10, "Clos", "Demande", 5, "Très basse", "2025-03-10T09:00:00", "2025-03-15T09:00:00", "[]", "", "Support N1", 0, 0, Some("2025-03-15T09:00:00"), 0, Some("Réseau")),
         ];
 
         for t in &tickets {
             conn.execute(
-                "INSERT INTO tickets (id, import_id, statut, type_ticket, priorite, date_ouverture,
+                "INSERT INTO tickets (id, import_id, statut, type_ticket, priorite, priorite_label, date_ouverture,
                     derniere_modification, techniciens, technicien_principal, groupe_principal,
                     est_vivant, anciennete_jours, date_cloture_approx, nombre_suivis, categorie)
-                 VALUES (?1, 1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
-                params![t.0, t.1, t.2, t.3, t.4, t.5, t.6, t.7, t.8, t.9, t.10, t.11, t.12, t.13],
+                 VALUES (?1, 1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+                params![t.0, t.1, t.2, t.3, t.4, t.5, t.6, t.7, t.8, t.9, t.10, t.11, t.12, t.13, t.14],
             )
             .unwrap();
         }

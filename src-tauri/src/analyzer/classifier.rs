@@ -81,6 +81,7 @@ mod tests {
             statut: "En cours (Attribué)".to_string(),
             type_ticket: "Incident".to_string(),
             priorite: None,
+            priorite_label: None,
             urgence: None,
             demandeur: String::new(),
             date_ouverture: String::new(),

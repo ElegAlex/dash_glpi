@@ -288,6 +288,9 @@ fn normalize_ticket(
         statut,
         type_ticket: raw.type_ticket.as_deref().unwrap_or("").trim().to_string(),
         priorite: raw.priorite.as_deref().and_then(parse_opt_i32),
+        priorite_label: raw.priorite.as_deref()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty()),
         urgence: raw.urgence.as_deref().and_then(parse_opt_i32),
         demandeur: raw.demandeur.as_deref().unwrap_or("").trim().to_string(),
         date_ouverture,

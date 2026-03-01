@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS tickets (
     statut                  TEXT NOT NULL,
     type_ticket             TEXT NOT NULL DEFAULT '',
     priorite                INTEGER,
+    priorite_label          TEXT,
     urgence                 INTEGER,
     demandeur               TEXT NOT NULL DEFAULT '',
     date_ouverture          TEXT NOT NULL,
