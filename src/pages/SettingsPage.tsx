@@ -290,8 +290,36 @@ function SettingsPage() {
         </SettingsCard>
         </div>
 
-        {/* Section 3 — Statuts */}
+        {/* Section 3 — Text Mining */}
         <div className="animate-fade-slide-up animation-delay-300">
+        <SettingsCard title="Text Mining">
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-800 mb-1">
+                Seuil de similarite doublons (Jaro-Winkler)
+              </label>
+              <input
+                type="number"
+                min={0.5}
+                max={1}
+                step={0.01}
+                value={form.seuilSimilariteDoublons}
+                onChange={(e) => {
+                  const v = Math.min(1, Math.max(0.5, Number(e.target.value)));
+                  set("seuilSimilariteDoublons", v);
+                }}
+                className="w-32 rounded-lg bg-white px-3 py-1.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+              />
+              <p className="mt-1 text-xs text-slate-400">
+                Plus le seuil est eleve, moins il y aura de doublons detectes (defaut : 0.92)
+              </p>
+            </div>
+          </div>
+        </SettingsCard>
+        </div>
+
+        {/* Section 4 — Statuts */}
+        <div className="animate-fade-slide-up animation-delay-450">
         <SettingsCard title="Statuts">
           <div className="space-y-6">
             <TagList

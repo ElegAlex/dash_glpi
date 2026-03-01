@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { Search, GitBranch, AlertTriangle, Copy, FileText, Hash, ChevronDown } from "lucide-react";
 import { useInvoke } from "../hooks/useInvoke";
 import KeywordList from "../components/mining/KeywordList";
@@ -123,6 +123,44 @@ function MiningPage() {
     };
     coocHook.execute("get_cooccurrence_network", { request });
   };
+
+  // Auto-refresh co-occurrence network when includeResolved changes
+  const coocLoaded = useRef(false);
+  useEffect(() => {
+    if (coocHook.data) coocLoaded.current = true;
+  }, [coocHook.data]);
+  useEffect(() => {
+    if (coocLoaded.current) {
+      const request: CooccurrenceRequest = {
+        topNNodes: 80,
+        maxEdges: 200,
+        includeResolved,
+      };
+      coocHook.execute("get_cooccurrence_network", { request });
+    }
+  }, [includeResolved]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-refresh duplicates when toggle changes
+  const dupLoaded = useRef(false);
+  useEffect(() => {
+    if (duplicateHook.data) dupLoaded.current = true;
+  }, [duplicateHook.data]);
+  useEffect(() => {
+    if (dupLoaded.current) {
+      duplicateHook.execute("detect_duplicates", { vivantsOnly: duplicateVivants });
+    }
+  }, [duplicateVivants]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-refresh clusters when toggle changes
+  const clusterLoaded = useRef(false);
+  useEffect(() => {
+    if (clusterHook.data) clusterLoaded.current = true;
+  }, [clusterHook.data]);
+  useEffect(() => {
+    if (clusterLoaded.current) {
+      clusterHook.execute("get_clusters", { corpus: "titres", nClusters: 0, vivantsOnly: clusterVivants });
+    }
+  }, [clusterVivants]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleNodeClick = useCallback(
     (word: string) => {
@@ -319,13 +357,13 @@ function MiningPage() {
                             }`}
                           />
                         </button>
-                        {showNetwork && !coocHook.data && (
+                        {showNetwork && (
                           <button
                             onClick={handleCooccurrence}
                             disabled={coocHook.loading}
                             className="rounded-xl bg-primary-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-600 disabled:opacity-50 transition-colors"
                           >
-                            {coocHook.loading ? "Generation..." : "Generer le reseau"}
+                            {coocHook.loading ? "Generation..." : coocHook.data ? "Recalculer" : "Generer le reseau"}
                           </button>
                         )}
                       </div>

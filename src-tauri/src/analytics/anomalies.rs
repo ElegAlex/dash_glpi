@@ -131,19 +131,24 @@ pub fn detect_zscore_anomalies(
 /// Détecte les paires de tickets potentiellement dupliqués.
 ///
 /// # Arguments
-/// * `tickets` — Liste de tickets vivants
-/// * `similarity_threshold` — Seuil Jaro-Winkler (défaut 0.85, RG-058)
+/// * `tickets` — Liste de tickets
+/// * `similarity_threshold` — Seuil Jaro-Winkler (défaut 0.92)
+/// * `max_results` — Nombre max de paires retournées
 ///
 /// # Algorithme
-/// 1. Grouper les tickets par groupe (tickets sans groupe → groupe "Inconnu")
-/// 2. Pour chaque groupe, comparer toutes les paires (i, j) avec i < j
+/// 1. Grouper les tickets par groupe
+/// 2. Pour les grands groupes (> 500), trier par titre et ne comparer
+///    que les voisins proches (fenêtre glissante) pour éviter O(n²)
 /// 3. Calculer la similarité Jaro-Winkler sur les titres en lowercase
 /// 4. Si similarité > threshold → ajouter à la liste des doublons
-/// 5. Ne pas comparer un ticket avec lui-même (même ID)
 pub fn find_duplicates(
     tickets: &[TicketForDuplicates],
     similarity_threshold: f64,
 ) -> Vec<DuplicatePair> {
+    const MAX_RESULTS: usize = 200;
+    const WINDOW_SIZE: usize = 30;
+    const LARGE_GROUP_THRESHOLD: usize = 500;
+
     let mut groups: HashMap<String, Vec<&TicketForDuplicates>> = HashMap::new();
     for ticket in tickets {
         let groupe = ticket
@@ -155,28 +160,57 @@ pub fn find_duplicates(
 
     let mut results: Vec<DuplicatePair> = Vec::new();
 
-    for (groupe, group_tickets) in &groups {
+    for (groupe, mut group_tickets) in groups {
         let n = group_tickets.len();
-        for i in 0..n {
-            for j in (i + 1)..n {
+
+        if n > LARGE_GROUP_THRESHOLD {
+            // Sort by lowercase title, then use sliding window
+            group_tickets.sort_by(|a, b| a.titre.to_lowercase().cmp(&b.titre.to_lowercase()));
+            for i in 0..n {
                 let a = group_tickets[i];
-                let b = group_tickets[j];
-                if a.ticket_id == b.ticket_id {
-                    continue;
+                let a_lower = a.titre.to_lowercase();
+                let window_end = (i + WINDOW_SIZE).min(n);
+                for j in (i + 1)..window_end {
+                    let b = group_tickets[j];
+                    let similarity = strsim::jaro_winkler(&a_lower, &b.titre.to_lowercase());
+                    if similarity > similarity_threshold {
+                        results.push(DuplicatePair {
+                            ticket_a_id: a.ticket_id,
+                            ticket_a_titre: a.titre.clone(),
+                            ticket_b_id: b.ticket_id,
+                            ticket_b_titre: b.titre.clone(),
+                            similarity,
+                            groupe: groupe.clone(),
+                        });
+                    }
                 }
-                let similarity = strsim::jaro_winkler(
-                    &a.titre.to_lowercase(),
-                    &b.titre.to_lowercase(),
-                );
-                if similarity > similarity_threshold {
-                    results.push(DuplicatePair {
-                        ticket_a_id: a.ticket_id,
-                        ticket_a_titre: a.titre.clone(),
-                        ticket_b_id: b.ticket_id,
-                        ticket_b_titre: b.titre.clone(),
-                        similarity,
-                        groupe: groupe.clone(),
-                    });
+                if results.len() >= MAX_RESULTS * 2 {
+                    break;
+                }
+            }
+        } else {
+            // Small group: full pairwise comparison
+            for i in 0..n {
+                for j in (i + 1)..n {
+                    let a = group_tickets[i];
+                    let b = group_tickets[j];
+                    if a.ticket_id == b.ticket_id {
+                        continue;
+                    }
+                    let similarity = strsim::jaro_winkler(
+                        &a.titre.to_lowercase(),
+                        &b.titre.to_lowercase(),
+                    );
+                    if similarity > similarity_threshold {
+                        results.push(DuplicatePair {
+                            ticket_a_id: a.ticket_id,
+                            ticket_a_titre: a.titre.clone(),
+                            ticket_b_id: b.ticket_id,
+                            ticket_b_titre: b.titre.clone(),
+                            similarity,
+                            groupe: groupe.clone(),
+                        });
+                    }
                 }
             }
         }
@@ -187,6 +221,7 @@ pub fn find_duplicates(
             .partial_cmp(&a.similarity)
             .unwrap_or(std::cmp::Ordering::Equal)
     });
+    results.truncate(MAX_RESULTS);
     results
 }
 

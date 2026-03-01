@@ -7,6 +7,7 @@ export interface AppConfig {
   seuilCouleurVert: number;
   seuilCouleurJaune: number;
   seuilCouleurOrange: number;
+  seuilSimilariteDoublons: number;
   statutsVivants: string[];
   statutsTermines: string[];
 }

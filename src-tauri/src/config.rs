@@ -12,6 +12,7 @@ pub struct AppConfig {
     pub seuil_couleur_vert: u32,
     pub seuil_couleur_jaune: u32,
     pub seuil_couleur_orange: u32,
+    pub seuil_similarite_doublons: f64,
     pub statuts_vivants: Vec<String>,
     pub statuts_termines: Vec<String>,
 }
@@ -31,6 +32,7 @@ pub fn get_config_from_db(conn: &Connection) -> Result<AppConfig, rusqlite::Erro
         seuil_couleur_vert: 10,
         seuil_couleur_jaune: 20,
         seuil_couleur_orange: 40,
+        seuil_similarite_doublons: 0.92,
         statuts_vivants: vec![
             "Nouveau".into(),
             "En cours (Attribué)".into(),
@@ -61,6 +63,7 @@ pub fn get_config_from_db(conn: &Connection) -> Result<AppConfig, rusqlite::Erro
             "seuil_couleur_vert" => config.seuil_couleur_vert = value.parse().unwrap_or(10),
             "seuil_couleur_jaune" => config.seuil_couleur_jaune = value.parse().unwrap_or(20),
             "seuil_couleur_orange" => config.seuil_couleur_orange = value.parse().unwrap_or(40),
+            "seuil_similarite_doublons" => config.seuil_similarite_doublons = value.parse().unwrap_or(0.92),
             "statuts_vivants" => {
                 if let Ok(v) = serde_json::from_str(&value) {
                     config.statuts_vivants = v;
@@ -111,6 +114,10 @@ pub fn update_config_in_db(conn: &Connection, config: &AppConfig) -> Result<(), 
         (
             "seuil_couleur_orange",
             config.seuil_couleur_orange.to_string(),
+        ),
+        (
+            "seuil_similarite_doublons",
+            config.seuil_similarite_doublons.to_string(),
         ),
         (
             "statuts_vivants",

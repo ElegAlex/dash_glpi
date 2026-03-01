@@ -68,17 +68,17 @@ export default function AnomalyList({ anomalies }: AnomalyListProps) {
                   >
                     {anomaly.severity}
                   </span>
+                  <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-xs text-slate-500 font-[DM_Sans]">
+                    {anomaly.anomalyType === "ticket_ancien" ? "Ancien" : anomaly.anomalyType === "ticket_inactif" ? "Inactif" : anomaly.anomalyType === "sans_suivi" ? "Sans suivi" : anomaly.anomalyType}
+                  </span>
                   <span className="text-xs text-slate-400 font-[DM_Sans]">#{anomaly.ticketId}</span>
                   <span className="truncate text-sm font-medium text-slate-800">
                     {anomaly.titre}
                   </span>
                 </div>
-                <p className="text-xs text-slate-500">
-                  <strong className="text-slate-800 font-[DM_Sans]">Z-score :</strong>{" "}
-                  {anomaly.metricValue.toFixed(2)} — {anomaly.description}
-                </p>
+                <p className="text-xs text-slate-500">{anomaly.description}</p>
                 <p className="text-xs text-slate-400">
-                  Plage attendue : {anomaly.expectedRange}
+                  Seuil : {anomaly.expectedRange}
                 </p>
               </div>
             </div>

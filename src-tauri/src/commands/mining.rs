@@ -14,6 +14,7 @@ use crate::nlp::tfidf::{
     build_tfidf_matrix, build_term_to_docs, compute_cooccurrences, corpus_stats, top_keywords,
     top_keywords_for_group,
 };
+use crate::config::get_config_from_db;
 use crate::state::AppState;
 
 // ── Structs IPC ───────────────────────────────────────────────────────────────
@@ -460,59 +461,135 @@ pub async fn get_clusters(
 pub async fn detect_anomalies(
     state: tauri::State<'_, AppState>,
 ) -> Result<Vec<AnomalyAlert>, String> {
-    let ticket_delays = {
-        let guard = state.db.lock().map_err(|e| format!("Lock error: {e}"))?;
-        let conn = guard.as_ref().ok_or("Base de données non initialisée")?;
-        let import_id = get_active_import(conn)?;
+    let guard = state.db.lock().map_err(|e| format!("Lock error: {e}"))?;
+    let conn = guard.as_ref().ok_or("Base de données non initialisée")?;
+    let import_id = get_active_import(conn)?;
 
+    let mut alerts: Vec<AnomalyAlert> = Vec::new();
+
+    // 1) Tickets vivants très anciens (> 300 jours)
+    {
         let mut stmt = conn
             .prepare(
-                "SELECT id, titre, technicien_principal, groupe_principal, anciennete_jours \
-                 FROM tickets WHERE import_id = ?1 AND est_vivant = 0 \
-                 AND anciennete_jours IS NOT NULL AND anciennete_jours > 0",
+                "SELECT id, titre, anciennete_jours, technicien_principal \
+                 FROM tickets WHERE import_id = ?1 AND est_vivant = 1 \
+                 AND anciennete_jours > 300 ORDER BY anciennete_jours DESC",
             )
-            .map_err(|e| format!("SQL prepare: {e}"))?;
-
+            .map_err(|e| format!("SQL: {e}"))?;
         let rows = stmt
             .query_map([import_id], |row| {
-                let id: i64 = row.get(0)?;
-                let titre: String = row.get(1)?;
-                let technicien: Option<String> = row.get(2)?;
-                let groupe: Option<String> = row.get(3)?;
-                let anciennete: i64 = row.get(4)?;
-                Ok((id, titre, technicien, groupe, anciennete))
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, i64>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                ))
             })
-            .map_err(|e| format!("SQL query: {e}"))?;
-
-        let mut delays: Vec<TicketDelay> = Vec::new();
+            .map_err(|e| format!("SQL: {e}"))?;
         for row in rows {
-            let (id, titre, technicien, groupe, anciennete) =
-                row.map_err(|e| format!("SQL row: {e}"))?;
-            delays.push(TicketDelay {
+            let (id, titre, anc, tech) = row.map_err(|e| format!("SQL: {e}"))?;
+            alerts.push(AnomalyAlert {
                 ticket_id: id as u64,
                 titre,
-                technicien,
-                groupe,
-                delay_days: anciennete as f64,
+                anomaly_type: "ticket_ancien".to_string(),
+                severity: if anc > 365 { "high" } else { "medium" }.to_string(),
+                description: format!(
+                    "Ticket ouvert depuis {} jours (tech: {})",
+                    anc,
+                    tech.as_deref().unwrap_or("non assigné")
+                ),
+                metric_value: anc as f64,
+                expected_range: "< 300 jours".to_string(),
             });
         }
-        delays
-    };
+    }
 
-    let anomalies = detect_zscore_anomalies(&ticket_delays, 2.5);
+    // 2) Tickets vivants inactifs (> 60 jours sans modification)
+    {
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, titre, inactivite_jours, anciennete_jours, technicien_principal \
+                 FROM tickets WHERE import_id = ?1 AND est_vivant = 1 \
+                 AND inactivite_jours > 60 AND anciennete_jours <= 300 \
+                 ORDER BY inactivite_jours DESC",
+            )
+            .map_err(|e| format!("SQL: {e}"))?;
+        let rows = stmt
+            .query_map([import_id], |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, i64>(2)?,
+                    row.get::<_, Option<i64>>(3)?,
+                    row.get::<_, Option<String>>(4)?,
+                ))
+            })
+            .map_err(|e| format!("SQL: {e}"))?;
+        for row in rows {
+            let (id, titre, inact, anc, tech) = row.map_err(|e| format!("SQL: {e}"))?;
+            alerts.push(AnomalyAlert {
+                ticket_id: id as u64,
+                titre,
+                anomaly_type: "ticket_inactif".to_string(),
+                severity: if inact > 120 { "high" } else { "medium" }.to_string(),
+                description: format!(
+                    "Aucune activité depuis {} jours (ouvert depuis {} jours, tech: {})",
+                    inact,
+                    anc.unwrap_or(0),
+                    tech.as_deref().unwrap_or("non assigné")
+                ),
+                metric_value: inact as f64,
+                expected_range: "< 60 jours d'inactivité".to_string(),
+            });
+        }
+    }
 
-    let alerts: Vec<AnomalyAlert> = anomalies
-        .into_iter()
-        .map(|a| AnomalyAlert {
-            ticket_id: a.ticket_id,
-            titre: a.titre,
-            anomaly_type: a.anomaly_type,
-            severity: a.severity,
-            description: a.description,
-            metric_value: a.delay_days,
-            expected_range: format!("Z-score: {:.2}", a.z_score),
-        })
-        .collect();
+    // 3) Tickets vivants sans aucun suivi depuis > 30 jours
+    {
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, titre, anciennete_jours, technicien_principal \
+                 FROM tickets WHERE import_id = ?1 AND est_vivant = 1 \
+                 AND nombre_suivis = 0 AND anciennete_jours > 30 \
+                 AND anciennete_jours <= 300 AND (inactivite_jours IS NULL OR inactivite_jours <= 60) \
+                 ORDER BY anciennete_jours DESC",
+            )
+            .map_err(|e| format!("SQL: {e}"))?;
+        let rows = stmt
+            .query_map([import_id], |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, i64>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                ))
+            })
+            .map_err(|e| format!("SQL: {e}"))?;
+        for row in rows {
+            let (id, titre, anc, tech) = row.map_err(|e| format!("SQL: {e}"))?;
+            alerts.push(AnomalyAlert {
+                ticket_id: id as u64,
+                titre,
+                anomaly_type: "sans_suivi".to_string(),
+                severity: if anc > 90 { "high" } else { "medium" }.to_string(),
+                description: format!(
+                    "Aucun suivi depuis l'ouverture il y a {} jours (tech: {})",
+                    anc,
+                    tech.as_deref().unwrap_or("non assigné")
+                ),
+                metric_value: anc as f64,
+                expected_range: "Au moins 1 suivi attendu".to_string(),
+            });
+        }
+    }
+
+    // Sort: high first, then by metric_value desc
+    alerts.sort_by(|a, b| {
+        let sev_ord = |s: &str| -> u8 { if s == "high" { 0 } else { 1 } };
+        sev_ord(&a.severity)
+            .cmp(&sev_ord(&b.severity))
+            .then(b.metric_value.partial_cmp(&a.metric_value).unwrap_or(std::cmp::Ordering::Equal))
+    });
 
     Ok(alerts)
 }
@@ -528,10 +605,11 @@ pub async fn detect_duplicates(
         ""
     };
 
-    let tickets = {
+    let (tickets, threshold) = {
         let guard = state.db.lock().map_err(|e| format!("Lock error: {e}"))?;
         let conn = guard.as_ref().ok_or("Base de données non initialisée")?;
         let import_id = get_active_import(conn)?;
+        let config = get_config_from_db(conn).map_err(|e| format!("Config: {e}"))?;
 
         let sql = format!(
             "SELECT id, titre, groupe_principal \
@@ -556,10 +634,10 @@ pub async fn detect_duplicates(
             let (id, titre, groupe) = row.map_err(|e| format!("SQL row: {e}"))?;
             tickets.push(TicketForDuplicates { ticket_id: id as u64, titre, groupe });
         }
-        tickets
+        (tickets, config.seuil_similarite_doublons)
     };
 
-    let pairs = find_duplicates(&tickets, 0.85);
+    let pairs = find_duplicates(&tickets, threshold);
 
     let result: Vec<DuplicatePairIpc> = pairs
         .into_iter()
