@@ -5,10 +5,16 @@ struct Migration {
     sql: &'static str,
 }
 
-const MIGRATIONS: &[Migration] = &[Migration {
-    version: 1,
-    sql: include_str!("sql/001_initial.sql"),
-}];
+const MIGRATIONS: &[Migration] = &[
+    Migration {
+        version: 1,
+        sql: include_str!("sql/001_initial.sql"),
+    },
+    Migration {
+        version: 2,
+        sql: include_str!("sql/002_priorite_label.sql"),
+    },
+];
 
 pub fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
     let current_version: u32 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
