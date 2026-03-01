@@ -1,25 +1,23 @@
 import { Link, useLocation } from "react-router";
 import {
   LayoutDashboard,
-  Upload,
+  Database,
   BarChart3,
   FolderTree,
   TrendingUp,
   Search,
   GitBranch,
-  Download,
   Settings,
 } from "lucide-react";
 
 const NAV_ITEMS = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
-  { icon: Upload, label: "Import", path: "/import" },
+  { icon: Database, label: "Donnees", path: "/data" },
   { icon: BarChart3, label: "Stock", path: "/stock" },
   { icon: FolderTree, label: "Categories", path: "/categories" },
   { icon: TrendingUp, label: "Bilan", path: "/bilan" },
   { icon: Search, label: "Text Mining", path: "/mining" },
   { icon: GitBranch, label: "Longitudinal", path: "/timeline" },
-  { icon: Download, label: "Export", path: "/export" },
   { icon: Settings, label: "Parametres", path: "/settings" },
 ] as const;
 

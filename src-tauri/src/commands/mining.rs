@@ -338,18 +338,26 @@ pub async fn get_clusters(
     state: tauri::State<'_, AppState>,
     corpus: String,
     n_clusters: usize,
+    vivants_only: Option<bool>,
 ) -> Result<ClusterResult, String> {
     let _ = corpus; // corpus loaded from DB
+    let vivant_clause = if vivants_only.unwrap_or(true) {
+        " AND est_vivant = 1"
+    } else {
+        ""
+    };
 
     let (texts, ticket_ids, technician_names) = {
         let guard = state.db.lock().map_err(|e| format!("Lock error: {e}"))?;
         let conn = guard.as_ref().ok_or("Base de données non initialisée")?;
         let import_id = get_active_import(conn)?;
 
+        let sql = format!(
+            "SELECT id, titre FROM tickets WHERE import_id = ?1{}",
+            vivant_clause
+        );
         let mut stmt = conn
-            .prepare(
-                "SELECT id, titre FROM tickets WHERE import_id = ?1 AND est_vivant = 1",
-            )
+            .prepare(&sql)
             .map_err(|e| format!("SQL prepare: {e}"))?;
 
         let mut texts: Vec<String> = Vec::new();
@@ -512,17 +520,26 @@ pub async fn detect_anomalies(
 #[tauri::command]
 pub async fn detect_duplicates(
     state: tauri::State<'_, AppState>,
+    vivants_only: Option<bool>,
 ) -> Result<Vec<DuplicatePairIpc>, String> {
+    let vivant_clause = if vivants_only.unwrap_or(true) {
+        " AND est_vivant = 1"
+    } else {
+        ""
+    };
+
     let tickets = {
         let guard = state.db.lock().map_err(|e| format!("Lock error: {e}"))?;
         let conn = guard.as_ref().ok_or("Base de données non initialisée")?;
         let import_id = get_active_import(conn)?;
 
+        let sql = format!(
+            "SELECT id, titre, groupe_principal \
+             FROM tickets WHERE import_id = ?1{}",
+            vivant_clause
+        );
         let mut stmt = conn
-            .prepare(
-                "SELECT id, titre, groupe_principal \
-                 FROM tickets WHERE import_id = ?1 AND est_vivant = 1",
-            )
+            .prepare(&sql)
             .map_err(|e| format!("SQL prepare: {e}"))?;
 
         let rows = stmt
@@ -557,6 +574,282 @@ pub async fn detect_duplicates(
         .collect();
 
     Ok(result)
+}
+
+// ── Cluster Detail ───────────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClusterDetail {
+    // Profil
+    pub mttr_avg: Option<f64>,
+    pub mttr_median: Option<f64>,
+    pub global_mttr_avg: Option<f64>,
+    pub ratio_incidents_demandes: f64,
+    pub nb_vivants: usize,
+    pub nb_termines: usize,
+    pub avg_suivis: f64,
+    pub anciennete_avg_vivants: Option<f64>,
+    // Répartition
+    pub par_technicien: Vec<ClusterVentilation>,
+    pub par_groupe: Vec<ClusterVentilation>,
+    // Stock vivant
+    pub stock_vivants: usize,
+    pub stock_sans_suivi: usize,
+    pub stock_plus_90j: usize,
+    pub stock_inactifs_14j: usize,
+    // Évolution temporelle
+    pub evolution_mensuelle: Vec<EvolutionPoint>,
+    // Tickets
+    pub tickets: Vec<ClusterTicket>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClusterVentilation {
+    pub label: String,
+    pub count: usize,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EvolutionPoint {
+    pub periode: String,
+    pub count: usize,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClusterTicket {
+    pub id: u64,
+    pub titre: String,
+    pub statut: String,
+    pub technicien: Option<String>,
+    pub anciennete_jours: Option<i64>,
+    pub nb_suivis: i64,
+    pub est_vivant: bool,
+}
+
+#[tauri::command]
+pub async fn get_cluster_detail(
+    state: tauri::State<'_, AppState>,
+    ticket_ids: Vec<u64>,
+) -> Result<ClusterDetail, String> {
+    let guard = state.db.lock().map_err(|e| format!("Lock error: {e}"))?;
+    let conn = guard.as_ref().ok_or("Base de données non initialisée")?;
+    let import_id = get_active_import(conn)?;
+
+    if ticket_ids.is_empty() {
+        return Err("Aucun ticket dans ce cluster".to_string());
+    }
+
+    // Build IN clause with numbered placeholders: ?2, ?3, ...
+    let id_params: Vec<i64> = ticket_ids.iter().map(|&id| id as i64).collect();
+    let placeholders: String = (2..=id_params.len() + 1)
+        .map(|i| format!("?{i}"))
+        .collect::<Vec<_>>()
+        .join(",");
+
+    // Build params vec once (import_id + ticket_ids)
+    let mut base_params: Vec<Box<dyn rusqlite::ToSql>> = Vec::with_capacity(1 + id_params.len());
+    base_params.push(Box::new(import_id));
+    for id in &id_params {
+        base_params.push(Box::new(*id));
+    }
+    let bp: Vec<&dyn rusqlite::ToSql> = base_params.iter().map(|b| b.as_ref()).collect();
+
+    // ── 1. Profil ──────────────────────────────────────────────────────
+
+    let sql_profil = format!(
+        "SELECT
+            COUNT(*) AS total,
+            SUM(CASE WHEN est_vivant = 1 THEN 1 ELSE 0 END) AS vivants,
+            SUM(CASE WHEN est_vivant = 0 THEN 1 ELSE 0 END) AS termines,
+            AVG(CASE WHEN est_vivant = 0 AND anciennete_jours IS NOT NULL THEN CAST(anciennete_jours AS REAL) END) AS mttr_avg,
+            AVG(CAST(nombre_suivis AS REAL)) AS avg_suivis,
+            AVG(CASE WHEN est_vivant = 1 AND anciennete_jours IS NOT NULL THEN CAST(anciennete_jours AS REAL) END) AS anc_avg_vivants,
+            SUM(CASE WHEN type_ticket = 'Incident' THEN 1 ELSE 0 END) AS nb_incidents,
+            SUM(CASE WHEN type_ticket = 'Demande' THEN 1 ELSE 0 END) AS nb_demandes
+         FROM tickets WHERE import_id = ?1 AND id IN ({placeholders})"
+    );
+
+    let (total, nb_vivants, nb_termines, mttr_avg, avg_suivis, anc_avg, nb_incidents, nb_demandes): (
+        i64, i64, i64, Option<f64>, f64, Option<f64>, i64, i64,
+    ) = conn
+        .query_row(&sql_profil, bp.as_slice(), |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get::<_, Option<f64>>(4)?.unwrap_or(0.0),
+                row.get(5)?,
+                row.get(6)?,
+                row.get(7)?,
+            ))
+        })
+        .map_err(|e| format!("SQL profil: {e}"))?;
+
+    let _ = total;
+
+    // MTTR median (cluster)
+    let sql_median = format!(
+        "SELECT anciennete_jours FROM tickets
+         WHERE import_id = ?1 AND id IN ({placeholders})
+         AND est_vivant = 0 AND anciennete_jours IS NOT NULL
+         ORDER BY anciennete_jours"
+    );
+    let mut stmt_med = conn.prepare(&sql_median).map_err(|e| format!("SQL median prep: {e}"))?;
+    let delays: Vec<f64> = stmt_med
+        .query_map(bp.as_slice(), |row| {
+            let v: i64 = row.get(0)?;
+            Ok(v as f64)
+        })
+        .map_err(|e| format!("SQL median: {e}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("SQL median collect: {e}"))?;
+
+    let mttr_median = if delays.is_empty() {
+        None
+    } else {
+        let mid = delays.len() / 2;
+        Some(if delays.len() % 2 == 0 {
+            (delays[mid - 1] + delays[mid]) / 2.0
+        } else {
+            delays[mid]
+        })
+    };
+
+    // Global MTTR average (all tickets in this import, not just cluster)
+    let global_mttr_avg: Option<f64> = conn
+        .query_row(
+            "SELECT AVG(CAST(anciennete_jours AS REAL)) FROM tickets
+             WHERE import_id = ?1 AND est_vivant = 0 AND anciennete_jours IS NOT NULL",
+            [import_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| format!("SQL global MTTR: {e}"))?;
+
+    let ratio = if nb_demandes > 0 {
+        nb_incidents as f64 / nb_demandes as f64
+    } else {
+        nb_incidents as f64
+    };
+
+    // ── 2. Répartition ─────────────────────────────────────────────────
+    let sql_tech = format!(
+        "SELECT technicien_principal, COUNT(*) AS cnt FROM tickets
+         WHERE import_id = ?1 AND id IN ({placeholders}) AND technicien_principal IS NOT NULL
+         GROUP BY technicien_principal ORDER BY cnt DESC LIMIT 10"
+    );
+    let mut stmt_tech = conn.prepare(&sql_tech).map_err(|e| format!("SQL tech: {e}"))?;
+    let par_technicien: Vec<ClusterVentilation> = stmt_tech
+        .query_map(bp.as_slice(), |row| {
+            Ok(ClusterVentilation {
+                label: row.get(0)?,
+                count: row.get::<_, i64>(1)? as usize,
+            })
+        })
+        .map_err(|e| format!("SQL tech query: {e}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("SQL tech collect: {e}"))?;
+
+    let sql_grp = format!(
+        "SELECT groupe_principal, COUNT(*) AS cnt FROM tickets
+         WHERE import_id = ?1 AND id IN ({placeholders}) AND groupe_principal IS NOT NULL
+         GROUP BY groupe_principal ORDER BY cnt DESC"
+    );
+    let mut stmt_grp = conn.prepare(&sql_grp).map_err(|e| format!("SQL grp: {e}"))?;
+    let par_groupe: Vec<ClusterVentilation> = stmt_grp
+        .query_map(bp.as_slice(), |row| {
+            Ok(ClusterVentilation {
+                label: row.get(0)?,
+                count: row.get::<_, i64>(1)? as usize,
+            })
+        })
+        .map_err(|e| format!("SQL grp query: {e}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("SQL grp collect: {e}"))?;
+
+    // ── 3. Stock vivant détaillé ───────────────────────────────────────
+    let sql_stock = format!(
+        "SELECT
+            SUM(CASE WHEN est_vivant = 1 THEN 1 ELSE 0 END),
+            SUM(CASE WHEN est_vivant = 1 AND (nombre_suivis IS NULL OR nombre_suivis = 0) THEN 1 ELSE 0 END),
+            SUM(CASE WHEN est_vivant = 1 AND anciennete_jours > 90 THEN 1 ELSE 0 END),
+            SUM(CASE WHEN est_vivant = 1 AND inactivite_jours > 14 THEN 1 ELSE 0 END)
+         FROM tickets WHERE import_id = ?1 AND id IN ({placeholders})"
+    );
+    let (stock_vivants, stock_sans_suivi, stock_plus_90j, stock_inactifs_14j): (i64, i64, i64, i64) = conn
+        .query_row(&sql_stock, bp.as_slice(), |row| {
+            Ok((
+                row.get::<_, Option<i64>>(0)?.unwrap_or(0),
+                row.get::<_, Option<i64>>(1)?.unwrap_or(0),
+                row.get::<_, Option<i64>>(2)?.unwrap_or(0),
+                row.get::<_, Option<i64>>(3)?.unwrap_or(0),
+            ))
+        })
+        .map_err(|e| format!("SQL stock: {e}"))?;
+
+    // ── 4. Évolution mensuelle ─────────────────────────────────────────
+    let sql_evo = format!(
+        "SELECT strftime('%Y-%m', date_ouverture) AS periode, COUNT(*) AS cnt
+         FROM tickets WHERE import_id = ?1 AND id IN ({placeholders})
+         GROUP BY periode ORDER BY periode"
+    );
+    let mut stmt_evo = conn.prepare(&sql_evo).map_err(|e| format!("SQL evo: {e}"))?;
+    let evolution_mensuelle: Vec<EvolutionPoint> = stmt_evo
+        .query_map(bp.as_slice(), |row| {
+            Ok(EvolutionPoint {
+                periode: row.get(0)?,
+                count: row.get::<_, i64>(1)? as usize,
+            })
+        })
+        .map_err(|e| format!("SQL evo query: {e}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("SQL evo collect: {e}"))?;
+
+    // ── 5. Liste tickets ───────────────────────────────────────────────
+    let sql_list = format!(
+        "SELECT id, titre, statut, technicien_principal, anciennete_jours, nombre_suivis, est_vivant
+         FROM tickets WHERE import_id = ?1 AND id IN ({placeholders})
+         ORDER BY anciennete_jours DESC"
+    );
+    let mut stmt_list = conn.prepare(&sql_list).map_err(|e| format!("SQL list: {e}"))?;
+    let tickets: Vec<ClusterTicket> = stmt_list
+        .query_map(bp.as_slice(), |row| {
+            Ok(ClusterTicket {
+                id: row.get::<_, i64>(0)? as u64,
+                titre: row.get(1)?,
+                statut: row.get(2)?,
+                technicien: row.get(3)?,
+                anciennete_jours: row.get(4)?,
+                nb_suivis: row.get::<_, Option<i64>>(5)?.unwrap_or(0),
+                est_vivant: row.get::<_, i64>(6)? == 1,
+            })
+        })
+        .map_err(|e| format!("SQL list query: {e}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("SQL list collect: {e}"))?;
+
+    Ok(ClusterDetail {
+        mttr_avg,
+        mttr_median,
+        global_mttr_avg,
+        ratio_incidents_demandes: ratio,
+        nb_vivants: nb_vivants as usize,
+        nb_termines: nb_termines as usize,
+        avg_suivis,
+        anciennete_avg_vivants: anc_avg,
+        par_technicien,
+        par_groupe,
+        stock_vivants: stock_vivants as usize,
+        stock_sans_suivi: stock_sans_suivi as usize,
+        stock_plus_90j: stock_plus_90j as usize,
+        stock_inactifs_14j: stock_inactifs_14j as usize,
+        evolution_mensuelle,
+        tickets,
+    })
 }
 
 // ── Co-occurrence IPC ────────────────────────────────────────────────────────

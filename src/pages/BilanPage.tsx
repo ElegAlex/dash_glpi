@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { subDays } from 'date-fns';
 import { invoke } from '@tauri-apps/api/core';
 import { ArrowDownToLine, ArrowUpFromLine, TrendingUp, BarChart3 } from 'lucide-react';
-import { PeriodSelector } from '../components/bilan/PeriodSelector';
+import { CompactFilterBar } from '../components/shared/CompactFilterBar';
 import { BilanChart } from '../components/bilan/BilanChart';
 import { KpiCard } from '../components/shared/KpiCard';
 import { BilanTable } from '../components/shared/BilanTable';
@@ -37,6 +37,8 @@ function BilanPage() {
   );
 
   useEffect(() => {
+    if (initialized.current) return;
+    initialized.current = true;
     invoke<ImportHistory[]>('get_import_history').then((history) => {
       const active = history.find((h) => h.isActive);
       if (active?.dateRangeFrom && active?.dateRangeTo) {
@@ -50,10 +52,8 @@ function BilanPage() {
       } else {
         load(range, granularity);
       }
-      initialized.current = true;
     }).catch(() => {
       load(range, granularity);
-      initialized.current = true;
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -73,23 +73,22 @@ function BilanPage() {
 
   return (
     <div>
-      <header className="sticky top-0 z-10 bg-[#F5F7FA]/80 backdrop-blur-sm px-8 pt-6 pb-4 border-b border-slate-200/30">
+      <header className="sticky top-0 z-10 bg-[#F5F7FA]/80 backdrop-blur-sm px-8 pt-6 pb-3 border-b border-slate-200/30">
         <h1 className="text-2xl font-bold font-[DM_Sans] text-slate-800 tracking-tight">
           Bilan d'activite
         </h1>
-        <p className="text-sm text-slate-400 mt-1">
+        <p className="text-sm text-slate-400 mt-0.5">
           Flux entrants et sortants sur la periode selectionnee
         </p>
-      </header>
-
-      <div className="px-8 pb-8 pt-6 space-y-6">
-        <PeriodSelector
+        <CompactFilterBar
           range={range}
           granularity={granularity}
           onRangeChange={handleRangeChange}
           onGranularityChange={handleGranularityChange}
         />
+      </header>
 
+      <div className="px-8 pb-8 pt-6 space-y-6">
         {error && (
           <div className="rounded-2xl bg-danger-50 shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)] px-4 py-3 text-sm text-danger-500">
             {error}

@@ -49,6 +49,46 @@ export interface ClusterInfo {
   avgResolutionDays: number | null;
 }
 
+// ── Cluster Detail ──
+export interface ClusterDetail {
+  mttrAvg: number | null;
+  mttrMedian: number | null;
+  globalMttrAvg: number | null;
+  ratioIncidentsDemandes: number;
+  nbVivants: number;
+  nbTermines: number;
+  avgSuivis: number;
+  ancienneteAvgVivants: number | null;
+  parTechnicien: ClusterVentilation[];
+  parGroupe: ClusterVentilation[];
+  stockVivants: number;
+  stockSansSuivi: number;
+  stockPlus90j: number;
+  stockInactifs14j: number;
+  evolutionMensuelle: EvolutionPoint[];
+  tickets: ClusterTicket[];
+}
+
+export interface ClusterVentilation {
+  label: string;
+  count: number;
+}
+
+export interface EvolutionPoint {
+  periode: string;
+  count: number;
+}
+
+export interface ClusterTicket {
+  id: number;
+  titre: string;
+  statut: string;
+  technicien: string | null;
+  ancienneteJours: number | null;
+  nbSuivis: number;
+  estVivant: boolean;
+}
+
 // ── Anomalies (US026) ──
 export interface AnomalyAlert {
   ticketId: number;

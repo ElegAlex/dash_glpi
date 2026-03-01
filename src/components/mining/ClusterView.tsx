@@ -20,9 +20,10 @@ function silhouetteBadge(score: number): { label: string; className: string } {
 interface ClusterViewProps {
   clusters: ClusterInfo[];
   silhouetteScore: number;
+  onClusterClick?: (cluster: ClusterInfo) => void;
 }
 
-export default function ClusterView({ clusters, silhouetteScore }: ClusterViewProps) {
+export default function ClusterView({ clusters, silhouetteScore, onClusterClick }: ClusterViewProps) {
   const badge = silhouetteBadge(silhouetteScore);
 
   return (
@@ -43,7 +44,8 @@ export default function ClusterView({ clusters, silhouetteScore }: ClusterViewPr
           return (
             <div
               key={cluster.id}
-              className="relative overflow-hidden rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)] hover:shadow-[0_3px_6px_rgba(0,0,0,0.10),0_2px_4px_rgba(0,0,0,0.06)] transition-shadow duration-200"
+              onClick={() => onClusterClick?.(cluster)}
+              className="relative overflow-hidden rounded-2xl bg-white p-5 shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)] hover:shadow-[0_3px_6px_rgba(0,0,0,0.10),0_2px_4px_rgba(0,0,0,0.06)] transition-shadow duration-200 cursor-pointer"
             >
               {/* Accent bar */}
               <div

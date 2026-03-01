@@ -4,9 +4,17 @@ import type { DashboardKpi } from '../../types/dashboard';
 
 interface KpiCardsProps {
   kpi: DashboardKpi;
+  granularity?: 'day' | 'week' | 'month' | 'quarter';
 }
 
-export function KpiCards({ kpi }: KpiCardsProps) {
+const granularityLabel: Record<string, string> = {
+  day: 'jour',
+  week: 'semaine',
+  month: 'mois',
+  quarter: 'trimestre',
+};
+
+export function KpiCards({ kpi, granularity = 'month' }: KpiCardsProps) {
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-5">
       <KpiCard
@@ -31,7 +39,7 @@ export function KpiCards({ kpi }: KpiCardsProps) {
         accentColor="#2E7D32"
       />
       <KpiCard
-        label="Creations / mois"
+        label={`Creations / ${granularityLabel[granularity]}`}
         value={Math.round(kpi.volumes.moyenneMensuelleCreation)}
         format="number"
         icon={<TrendingUp size={18} color="#FF8F00" />}

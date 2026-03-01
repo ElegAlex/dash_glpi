@@ -1,8 +1,5 @@
-import { useState } from 'react';
-import { DayPicker, type DateRange as DayPickerRange } from 'react-day-picker';
-import { fr } from 'react-day-picker/locale';
-import { subDays, startOfQuarter, endOfQuarter, subQuarters, differenceInDays } from 'date-fns';
-import 'react-day-picker/style.css';
+import { useState, useEffect } from 'react';
+import { subDays, startOfQuarter, endOfQuarter, subQuarters, differenceInDays, format, parse, isValid } from 'date-fns';
 
 export type Granularity = 'day' | 'week' | 'month' | 'quarter';
 
@@ -19,7 +16,7 @@ export function detectGranularity(from: Date, to: Date): Granularity {
   return 'quarter';
 }
 
-type Preset = '7d' | '30d' | 'quarter' | 'custom';
+type Preset = '7d' | '30d' | 'quarter';
 
 interface DateRangePickerProps {
   value: DateRange;
@@ -27,13 +24,12 @@ interface DateRangePickerProps {
 }
 
 const PRESETS: { id: Preset; label: string }[] = [
-  { id: '7d', label: '7 derniers jours' },
-  { id: '30d', label: '30 derniers jours' },
-  { id: 'quarter', label: 'Dernier trimestre' },
-  { id: 'custom', label: 'Personnalisé' },
+  { id: '7d', label: '7j' },
+  { id: '30d', label: '30j' },
+  { id: 'quarter', label: 'Trim.' },
 ];
 
-function getPresetRange(preset: Preset): DateRange | null {
+function getPresetRange(preset: Preset): DateRange {
   const today = new Date();
   switch (preset) {
     case '7d':
@@ -44,68 +40,103 @@ function getPresetRange(preset: Preset): DateRange | null {
       const lastQ = subQuarters(today, 1);
       return { from: startOfQuarter(lastQ), to: endOfQuarter(lastQ) };
     }
-    case 'custom':
-      return null;
   }
 }
 
-export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
-  const [activePreset, setActivePreset] = useState<Preset>('30d');
-  const [showCalendar, setShowCalendar] = useState(false);
-  const [pendingRange, setPendingRange] = useState<DayPickerRange | undefined>({
-    from: value.from,
-    to: value.to,
-  });
+function formatFr(d: Date): string {
+  return format(d, 'dd/MM/yyyy');
+}
 
-  const handlePreset = (preset: Preset) => {
-    setActivePreset(preset);
-    if (preset === 'custom') {
-      setShowCalendar(true);
-      return;
-    }
-    setShowCalendar(false);
-    const range = getPresetRange(preset);
-    if (range) {
-      onChange(range, detectGranularity(range.from, range.to));
-    }
-  };
+function parseFr(s: string): Date | null {
+  const d = parse(s.trim(), 'dd/MM/yyyy', new Date());
+  return isValid(d) ? d : null;
+}
 
-  const handleRangeSelect = (range: DayPickerRange | undefined) => {
-    setPendingRange(range);
-    if (range?.from && range?.to) {
-      onChange({ from: range.from, to: range.to }, detectGranularity(range.from, range.to));
+function DateInput({
+  value,
+  onChange,
+}: {
+  value: Date;
+  onChange: (d: Date) => void;
+}) {
+  const [text, setText] = useState(formatFr(value));
+  const [invalid, setInvalid] = useState(false);
+
+  // Sync text when value changes externally (presets)
+  useEffect(() => {
+    setText(formatFr(value));
+    setInvalid(false);
+  }, [value]);
+
+  const commit = () => {
+    const d = parseFr(text);
+    if (d) {
+      setInvalid(false);
+      onChange(d);
+    } else {
+      setInvalid(true);
+      // Reset to current valid value after a brief flash
+      setTimeout(() => {
+        setText(formatFr(value));
+        setInvalid(false);
+      }, 800);
     }
   };
 
   return (
-    <div className="flex gap-3 items-start flex-wrap">
-      <div className="flex flex-col gap-1 min-w-[160px]">
-        {PRESETS.map((p) => (
-          <button
-            key={p.id}
-            onClick={() => handlePreset(p.id)}
-            className={`text-left px-3 py-2 rounded-xl text-sm font-medium transition-colors ${
-              activePreset === p.id
-                ? 'bg-primary-500 text-white'
-                : 'text-slate-500 hover:bg-[rgba(12,65,154,0.04)] hover:text-slate-800'
-            }`}
-          >
-            {p.label}
-          </button>
-        ))}
-      </div>
+    <input
+      type="text"
+      value={text}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.currentTarget.blur();
+        }
+      }}
+      placeholder="jj/mm/aaaa"
+      className={`w-[88px] px-2 py-1 rounded-lg text-xs font-medium font-[DM_Sans] text-center
+        bg-slate-100 border outline-none transition-colors
+        ${invalid
+          ? 'border-red-400 text-red-600'
+          : 'border-transparent focus:border-[#0C419A]/30 text-slate-700'
+        }`}
+    />
+  );
+}
 
-      {showCalendar && (
-        <div className="rounded-2xl bg-white shadow-[0_10px_20px_rgba(0,0,0,0.10),0_3px_6px_rgba(0,0,0,0.06)] p-3">
-          <DayPicker
-            mode="range"
-            locale={fr}
-            selected={pendingRange}
-            onSelect={handleRangeSelect}
-            numberOfMonths={2}
-          />
-        </div>
-      )}
+export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
+  const handlePreset = (preset: Preset) => {
+    const range = getPresetRange(preset);
+    onChange(range, detectGranularity(range.from, range.to));
+  };
+
+  const handleFromChange = (d: Date) => {
+    const range = { from: d, to: value.to < d ? d : value.to };
+    onChange(range, detectGranularity(range.from, range.to));
+  };
+
+  const handleToChange = (d: Date) => {
+    const range = { from: value.from > d ? d : value.from, to: d };
+    onChange(range, detectGranularity(range.from, range.to));
+  };
+
+  return (
+    <div className="flex items-center gap-1.5">
+      {PRESETS.map((p) => (
+        <button
+          key={p.id}
+          onClick={() => handlePreset(p.id)}
+          className="px-2.5 py-1 rounded-lg text-xs font-medium font-[DM_Sans] transition-colors text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+        >
+          {p.label}
+        </button>
+      ))}
+
+      <span className="text-[11px] text-slate-400 font-[Source_Sans_3] ml-1">du</span>
+      <DateInput value={value.from} onChange={handleFromChange} />
+      <span className="text-[11px] text-slate-400 font-[Source_Sans_3]">au</span>
+      <DateInput value={value.to} onChange={handleToChange} />
     </div>
   );
 }

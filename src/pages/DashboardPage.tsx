@@ -1,4 +1,8 @@
-import { useDashboardKpi } from '../hooks/useDashboardKpi';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { subDays } from 'date-fns';
+import { invoke } from '@tauri-apps/api/core';
+import { useInvoke } from '../hooks/useInvoke';
+import { CompactFilterBar } from '../components/shared/CompactFilterBar';
 import { KpiCards } from '../components/dashboard/KpiCards';
 import { VolumeChart } from '../components/dashboard/VolumeChart';
 import { MttrTrendChart } from '../components/dashboard/MttrTrendChart';
@@ -7,23 +11,89 @@ import { TauxN1TrendChart } from '../components/dashboard/TauxN1TrendChart';
 import { TypologieSection } from '../components/dashboard/TypologieSection';
 import { MttrComparatifTable } from '../components/dashboard/MttrComparatifTable';
 import { Card } from '../components/shared/Card';
+import type { DashboardKpi } from '../types/dashboard';
+import type { ImportHistory } from '../types/config';
+import { type DateRange, type Granularity } from '../components/shared/DateRangePicker';
+
+function formatDate(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
 
 function DashboardPage() {
-  const { data, loading, error } = useDashboardKpi();
+  const today = new Date();
+  const [range, setRange] = useState<DateRange>({ from: subDays(today, 29), to: today });
+  const [granularity, setGranularity] = useState<Granularity>('month');
+  const { data, loading, error, execute } = useInvoke<DashboardKpi>();
+  const initialized = useRef(false);
+
+  const load = useCallback(
+    (r: DateRange, g: Granularity) => {
+      execute('get_dashboard_kpi', {
+        dateDebut: formatDate(r.from),
+        dateFin: formatDate(r.to),
+        granularity: g,
+      });
+    },
+    [execute],
+  );
+
+  useEffect(() => {
+    if (initialized.current) return;
+    initialized.current = true;
+    invoke<ImportHistory[]>('get_import_history')
+      .then((history) => {
+        const active = history.find((h) => h.isActive);
+        if (active?.dateRangeFrom && active?.dateRangeTo) {
+          const from = new Date(active.dateRangeFrom);
+          const to = new Date(active.dateRangeTo);
+          setRange({ from, to });
+          const days = (to.getTime() - from.getTime()) / 86400000;
+          const g: Granularity = days > 365 ? 'quarter' : days > 60 ? 'month' : days > 14 ? 'week' : 'day';
+          setGranularity(g);
+          load({ from, to }, g);
+        } else {
+          load(range, granularity);
+        }
+      })
+      .catch(() => {
+        load(range, granularity);
+      });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleRangeChange = (r: DateRange, autoGran: Granularity) => {
+    setRange(r);
+    setGranularity(autoGran);
+    load(r, autoGran);
+  };
+
+  const handleGranularityChange = (g: Granularity) => {
+    setGranularity(g);
+    load(range, g);
+  };
 
   const subtitle = data
-    ? `${data.meta.totalTickets.toLocaleString('fr-FR')} tickets · ${data.meta.plageDates[0]} au ${data.meta.plageDates[1]} · Calcul en ${data.meta.calculDurationMs}ms`
+    ? `${data.meta.totalTickets.toLocaleString('fr-FR')} tickets · Calcul en ${data.meta.calculDurationMs}ms`
     : null;
 
   return (
     <div>
-      <header className="sticky top-0 z-10 bg-[#F5F7FA]/80 backdrop-blur-sm px-8 pt-6 pb-4 border-b border-slate-200/30">
-        <h1 className="text-2xl font-bold font-[DM_Sans] text-slate-800 tracking-tight">
-          Dashboard ITSM
-        </h1>
-        <p className="text-sm text-slate-400 mt-1">
-          {subtitle ?? 'Vue synthetique des indicateurs ITSM'}
-        </p>
+      <header className="sticky top-0 z-10 bg-[#F5F7FA]/80 backdrop-blur-sm px-8 pt-6 pb-3 border-b border-slate-200/30">
+        <div className="flex items-baseline justify-between">
+          <div>
+            <h1 className="text-2xl font-bold font-[DM_Sans] text-slate-800 tracking-tight">
+              Dashboard ITSM
+            </h1>
+            <p className="text-sm text-slate-400 mt-0.5">
+              {subtitle ?? 'Vue synthetique des indicateurs ITSM'}
+            </p>
+          </div>
+        </div>
+        <CompactFilterBar
+          range={range}
+          granularity={granularity}
+          onRangeChange={handleRangeChange}
+          onGranularityChange={handleGranularityChange}
+        />
       </header>
 
       <div className="px-8 pb-8 pt-6 space-y-6">
@@ -45,14 +115,14 @@ function DashboardPage() {
           <>
             {/* KPI Cards */}
             <div className="animate-fade-slide-up">
-              <KpiCards kpi={data} />
+              <KpiCards kpi={data} granularity={granularity} />
             </div>
 
             {/* Volume + MTTR Trend */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 animate-fade-slide-up animation-delay-150">
               <Card>
                 <h2 className="text-lg font-semibold font-[DM_Sans] text-slate-700 mb-4">
-                  Volumetrie mensuelle
+                  Volumetrie {granularity === 'day' ? 'journaliere' : granularity === 'week' ? 'hebdomadaire' : granularity === 'quarter' ? 'trimestrielle' : 'mensuelle'}
                 </h2>
                 <VolumeChart data={data.volumes.parMois} />
               </Card>
@@ -85,7 +155,7 @@ function DashboardPage() {
 
             {/* Typologie */}
             <div className="animate-fade-slide-up animation-delay-450">
-              <TypologieSection typologie={data.typologie} />
+              <TypologieSection typologie={data.typologie} volumes={data.volumes.parMois} />
             </div>
 
             {/* MTTR Comparatif Table */}

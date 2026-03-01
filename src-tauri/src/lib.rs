@@ -66,6 +66,7 @@ pub fn run() {
             commands::mining::detect_anomalies,
             commands::mining::detect_duplicates,
             commands::mining::get_cooccurrence_network,
+            commands::mining::get_cluster_detail,
             // Export
             commands::export::export_excel_stock,
             commands::export::export_excel_bilan,
@@ -445,7 +446,7 @@ mod e2e_tests {
             Some(c) => c,
             None => return,
         };
-        let kpi = crate::analyzer::dashboard::build_dashboard_kpi(&conn, 1, &None, &None)
+        let kpi = crate::analyzer::dashboard::build_dashboard_kpi(&conn, 1, &None, &None, "month")
             .expect("build_dashboard_kpi failed");
         assert!(kpi.meta.total_tickets > 0);
         assert!(kpi.resolution.mttr_global_jours > 0.0);

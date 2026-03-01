@@ -5,6 +5,7 @@ import KeywordList from "../components/mining/KeywordList";
 import CooccurrenceNetwork from "../components/mining/CooccurrenceNetwork";
 import DrillDownPanel from "../components/mining/DrillDownPanel";
 import ClusterView from "../components/mining/ClusterView";
+import ClusterDetailPanel from "../components/mining/ClusterDetailPanel";
 import AnomalyList from "../components/mining/AnomalyList";
 import DuplicateList from "../components/mining/DuplicateList";
 import { Card } from "../components/shared/Card";
@@ -13,6 +14,8 @@ import type {
   TextAnalysisResult,
   TextAnalysisRequest,
   ClusterResult,
+  ClusterInfo,
+  ClusterDetail,
   AnomalyAlert,
   DuplicatePair,
   CooccurrenceResult,
@@ -71,12 +74,16 @@ function MiningPage() {
   const [corpus, setCorpus] = useState<Corpus>("titres");
   const [scope, setScope] = useState<Scope>("global");
   const [includeResolved, setIncludeResolved] = useState(false);
+  const [clusterVivants, setClusterVivants] = useState(true);
+  const [duplicateVivants, setDuplicateVivants] = useState(true);
   const [showNetwork, setShowNetwork] = useState(false);
   const [drillDown, setDrillDown] = useState<{ title: string; tickets: TicketRef[] } | null>(null);
+  const [selectedCluster, setSelectedCluster] = useState<ClusterInfo | null>(null);
 
   const analysisHook = useInvoke<TextAnalysisResult>();
   const coocHook = useInvoke<CooccurrenceResult>();
   const clusterHook = useInvoke<ClusterResult>();
+  const clusterDetailHook = useInvoke<ClusterDetail>();
   const anomalyHook = useInvoke<AnomalyAlert[]>();
   const duplicateHook = useInvoke<DuplicatePair[]>();
 
@@ -92,15 +99,20 @@ function MiningPage() {
   };
 
   const handleCluster = () => {
-    clusterHook.execute("get_clusters", { corpus: "titres", nClusters: 0 });
+    clusterHook.execute("get_clusters", { corpus: "titres", nClusters: 0, vivantsOnly: clusterVivants });
   };
+
+  const handleClusterClick = useCallback((cluster: ClusterInfo) => {
+    setSelectedCluster(cluster);
+    clusterDetailHook.execute("get_cluster_detail", { ticketIds: cluster.ticketIds });
+  }, [clusterDetailHook]);
 
   const handleAnomalies = () => {
     anomalyHook.execute("detect_anomalies", {});
   };
 
   const handleDuplicates = () => {
-    duplicateHook.execute("detect_duplicates", {});
+    duplicateHook.execute("detect_duplicates", { vivantsOnly: duplicateVivants });
   };
 
   const handleCooccurrence = () => {
@@ -366,7 +378,29 @@ function MiningPage() {
         {/* Tab: Clusters */}
         {mainTab === "clusters" && (
           <div className="space-y-6">
-            <div className="flex justify-end">
+            <div className="flex items-center justify-between">
+              <div className="flex gap-1 bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)] p-1">
+                <button
+                  onClick={() => setClusterVivants(true)}
+                  className={`px-4 py-2 text-sm rounded-xl transition-all duration-150 ${
+                    clusterVivants
+                      ? "bg-primary-500 text-white font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)]"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  En cours
+                </button>
+                <button
+                  onClick={() => setClusterVivants(false)}
+                  className={`px-4 py-2 text-sm rounded-xl transition-all duration-150 ${
+                    !clusterVivants
+                      ? "bg-primary-500 text-white font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)]"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  Tous les tickets
+                </button>
+              </div>
               <button
                 onClick={handleCluster}
                 disabled={clusterHook.loading}
@@ -387,6 +421,7 @@ function MiningPage() {
               <ClusterView
                 clusters={clusterHook.data.clusters}
                 silhouetteScore={clusterHook.data.silhouetteScore}
+                onClusterClick={handleClusterClick}
               />
             )}
           </div>
@@ -421,7 +456,29 @@ function MiningPage() {
         {/* Tab: Doublons */}
         {mainTab === "duplicates" && (
           <div className="space-y-6">
-            <div className="flex justify-end">
+            <div className="flex items-center justify-between">
+              <div className="flex gap-1 bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)] p-1">
+                <button
+                  onClick={() => setDuplicateVivants(true)}
+                  className={`px-4 py-2 text-sm rounded-xl transition-all duration-150 ${
+                    duplicateVivants
+                      ? "bg-primary-500 text-white font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)]"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  En cours
+                </button>
+                <button
+                  onClick={() => setDuplicateVivants(false)}
+                  className={`px-4 py-2 text-sm rounded-xl transition-all duration-150 ${
+                    !duplicateVivants
+                      ? "bg-primary-500 text-white font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)]"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  Tous les tickets
+                </button>
+              </div>
               <button
                 onClick={handleDuplicates}
                 disabled={duplicateHook.loading}
@@ -450,6 +507,16 @@ function MiningPage() {
           title={drillDown.title}
           tickets={drillDown.tickets}
           onClose={() => setDrillDown(null)}
+        />
+      )}
+
+      {selectedCluster && (
+        <ClusterDetailPanel
+          cluster={selectedCluster}
+          detail={clusterDetailHook.data!}
+          loading={clusterDetailHook.loading}
+          error={clusterDetailHook.error}
+          onClose={() => setSelectedCluster(null)}
         />
       )}
     </div>

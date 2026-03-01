@@ -186,6 +186,19 @@ fn pct(count: i64, total: i64) -> f64 {
     }
 }
 
+/// Returns a SQL expression that buckets a date column into period keys
+/// matching the granularity (day, week, month, quarter).
+fn period_expr(granularity: &str, date_col: &str) -> String {
+    match granularity {
+        "day" => format!("strftime('%Y-%m-%d', {date_col})"),
+        "week" => format!("strftime('%Y-W%W', {date_col})"),
+        "quarter" => format!(
+            "(strftime('%Y', {date_col}) || '-Q' || ((CAST(strftime('%m', {date_col}) AS INTEGER) - 1) / 3 + 1))"
+        ),
+        _ => format!("strftime('%Y-%m', {date_col})"), // month
+    }
+}
+
 /// Builds a WHERE clause fragment for optional date filtering.
 /// Returns (clause_string, params_vec).
 fn date_filter_clause(
@@ -222,11 +235,10 @@ fn build_meta(
     date_clause: &str,
     date_params: &[String],
 ) -> Result<DashboardMeta, rusqlite::Error> {
-    // Total, vivants, termines
+    // Total and termines (filtered by period)
     let sql = format!(
         "SELECT
             COUNT(*) AS total,
-            COALESCE(SUM(CASE WHEN est_vivant = 1 THEN 1 ELSE 0 END), 0) AS vivants,
             COALESCE(SUM(CASE WHEN est_vivant = 0 THEN 1 ELSE 0 END), 0) AS termines
          FROM tickets WHERE import_id = ?{}",
         date_clause
@@ -235,16 +247,22 @@ fn build_meta(
     for p in date_params {
         all_params.push(Box::new(p.clone()));
     }
-    let (total, vivants, termines) = conn.query_row(
+    let (total, termines) = conn.query_row(
         &sql,
         rusqlite::params_from_iter(all_params.iter().map(|b| b.as_ref())),
         |row| {
             Ok((
                 row.get::<_, i64>(0)?,
                 row.get::<_, i64>(1)?,
-                row.get::<_, i64>(2)?,
             ))
         },
+    )?;
+
+    // Stock vivant: absolute snapshot, NOT filtered by period
+    let vivants: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM tickets WHERE import_id = ? AND est_vivant = 1",
+        [import_id],
+        |row| row.get(0),
     )?;
 
     // Date range
@@ -429,6 +447,7 @@ fn build_resolution(
     import_id: i64,
     date_clause: &str,
     date_params: &[String],
+    gran: &str,
 ) -> Result<ResolutionKpi, rusqlite::Error> {
     // Collect resolution durations
     let sql = format!(
@@ -478,7 +497,7 @@ fn build_resolution(
     let distribution_tranches = build_pec_distribution(&durations, echantillon);
 
     // Monthly trend
-    let trend_mensuel = build_resolution_trend(conn, import_id, date_clause, date_params)?;
+    let trend_mensuel = build_resolution_trend(conn, import_id, date_clause, date_params, gran)?;
 
     Ok(ResolutionKpi {
         mttr_global_jours: mttr_global,
@@ -604,15 +623,16 @@ fn build_resolution_trend(
     import_id: i64,
     date_clause: &str,
     date_params: &[String],
+    gran: &str,
 ) -> Result<Vec<MttrTrend>, rusqlite::Error> {
-    // Collect all durations with their month
+    let pe = period_expr(gran, "date_cloture_approx");
     let sql = format!(
-        "SELECT strftime('%Y-%m', date_cloture_approx) AS mois,
+        "SELECT {pe} AS periode,
                 julianday(date_cloture_approx) - julianday(date_ouverture) AS dur
          FROM tickets
          WHERE import_id = ? AND est_vivant = 0
            AND date_cloture_approx IS NOT NULL AND date_ouverture IS NOT NULL{}
-         ORDER BY mois",
+         ORDER BY periode",
         date_clause
     );
     let mut all_params: Vec<Box<dyn rusqlite::types::ToSql>> = vec![Box::new(import_id)];
@@ -627,18 +647,18 @@ fn build_resolution_trend(
         },
     )?;
 
-    let mut by_month: BTreeMap<String, Vec<f64>> = BTreeMap::new();
+    let mut by_period: BTreeMap<String, Vec<f64>> = BTreeMap::new();
     for row in rows {
-        let (mois, dur) = row?;
+        let (p, dur) = row?;
         if dur >= 0.0 {
-            by_month.entry(mois).or_default().push(dur);
+            by_period.entry(p).or_default().push(dur);
         }
     }
 
     let mut trends = Vec::new();
-    for (mois, durs) in &by_month {
+    for (p, durs) in &by_period {
         trends.push(MttrTrend {
-            periode: mois.clone(),
+            periode: p.clone(),
             mttr_jours: round1(moyenne(durs)),
             mediane_jours: round1(percentile(durs, 50.0)),
             nb_resolus: durs.len() as i64,
@@ -653,6 +673,7 @@ fn build_taux_n1(
     import_id: i64,
     date_clause: &str,
     date_params: &[String],
+    gran: &str,
 ) -> Result<TauxN1Kpi, rusqlite::Error> {
     let safe_len = SAFE_JSON_LEN;
 
@@ -749,7 +770,7 @@ fn build_taux_n1(
     let par_groupe = build_taux_n1_par_groupe(conn, import_id, date_clause, date_params)?;
 
     // Trend mensuel
-    let trend_mensuel = build_taux_n1_trend(conn, import_id, date_clause, date_params)?;
+    let trend_mensuel = build_taux_n1_trend(conn, import_id, date_clause, date_params, gran)?;
 
     Ok(TauxN1Kpi {
         total_termines,
@@ -830,11 +851,13 @@ fn build_taux_n1_trend(
     import_id: i64,
     date_clause: &str,
     date_params: &[String],
+    gran: &str,
 ) -> Result<Vec<TauxN1Trend>, rusqlite::Error> {
     let safe_len = SAFE_JSON_LEN;
+    let pe = period_expr(gran, "date_cloture_approx");
     let sql = format!(
         "SELECT
-            strftime('%Y-%m', date_cloture_approx) AS mois,
+            {pe} AS periode,
             COUNT(*) AS total_resolus,
             SUM(CASE WHEN ({safe_len}) <= 1
                       AND technicien_principal IS NOT NULL AND technicien_principal != ''
@@ -844,8 +867,8 @@ fn build_taux_n1_trend(
          FROM tickets
          WHERE import_id = ? AND est_vivant = 0
            AND date_cloture_approx IS NOT NULL{date_clause}
-         GROUP BY mois
-         ORDER BY mois",
+         GROUP BY periode
+         ORDER BY periode",
         safe_len = safe_len,
         date_clause = date_clause,
     );
@@ -857,12 +880,12 @@ fn build_taux_n1_trend(
     let rows = stmt.query_map(
         rusqlite::params_from_iter(all_params.iter().map(|b| b.as_ref())),
         |row| {
-            let mois: String = row.get(0)?;
+            let periode: String = row.get(0)?;
             let total_resolus: i64 = row.get(1)?;
             let n1_strict_count: i64 = row.get(2)?;
             let n1_elargi_count: i64 = row.get(3)?;
             Ok(TauxN1Trend {
-                periode: mois,
+                periode,
                 n1_strict_pct: pct(n1_strict_count, total_resolus),
                 n1_elargi_pct: pct(n1_elargi_count, total_resolus),
                 total_resolus,
@@ -878,14 +901,17 @@ fn build_volumetrie(
     import_id: i64,
     date_clause: &str,
     date_params: &[String],
+    gran: &str,
 ) -> Result<VolumetrieKpi, rusqlite::Error> {
-    // Created by month
+    let pe_ouv = period_expr(gran, "date_ouverture");
+    let pe_clo = period_expr(gran, "date_cloture_approx");
+
     let sql_crees = format!(
-        "SELECT strftime('%Y-%m', date_ouverture) AS mois, COUNT(*) AS cnt
+        "SELECT {pe_ouv} AS periode, COUNT(*) AS cnt
          FROM tickets
          WHERE import_id = ? AND date_ouverture IS NOT NULL{}
-         GROUP BY mois
-         ORDER BY mois",
+         GROUP BY periode
+         ORDER BY periode",
         date_clause
     );
     let mut p1: Vec<Box<dyn rusqlite::types::ToSql>> = vec![Box::new(import_id)];
@@ -906,13 +932,13 @@ fn build_volumetrie(
         volume_map.entry(mois).or_insert((0, 0)).0 = cnt;
     }
 
-    // Resolved by month
+    // Resolved by period
     let sql_resolus = format!(
-        "SELECT strftime('%Y-%m', date_cloture_approx) AS mois, COUNT(*) AS cnt
+        "SELECT {pe_clo} AS periode, COUNT(*) AS cnt
          FROM tickets
          WHERE import_id = ? AND est_vivant = 0 AND date_cloture_approx IS NOT NULL{}
-         GROUP BY mois
-         ORDER BY mois",
+         GROUP BY periode
+         ORDER BY periode",
         date_clause
     );
     let mut p2: Vec<Box<dyn rusqlite::types::ToSql>> = vec![Box::new(import_id)];
@@ -1126,21 +1152,27 @@ fn build_ventilation_priorite(
 /// * `import_id` - Active import ID
 /// * `date_debut` - Optional start date filter (ISO format)
 /// * `date_fin` - Optional end date filter (ISO format)
+/// * `granularity` - Time bucketing: "day", "week", "month", "quarter"
 pub fn build_dashboard_kpi(
     conn: &Connection,
     import_id: i64,
     date_debut: &Option<String>,
     date_fin: &Option<String>,
+    granularity: &str,
 ) -> Result<DashboardKpi, rusqlite::Error> {
     let start = Instant::now();
+    let gran = match granularity {
+        "day" | "week" | "month" | "quarter" => granularity,
+        _ => "month",
+    };
 
     let (date_clause, date_params) = date_filter_clause(date_debut, date_fin);
 
     let mut meta = build_meta(conn, import_id, &date_clause, &date_params)?;
     let prise_en_charge = build_prise_en_charge(conn, import_id, &date_clause, &date_params)?;
-    let resolution = build_resolution(conn, import_id, &date_clause, &date_params)?;
-    let taux_n1 = build_taux_n1(conn, import_id, &date_clause, &date_params)?;
-    let volumes = build_volumetrie(conn, import_id, &date_clause, &date_params)?;
+    let resolution = build_resolution(conn, import_id, &date_clause, &date_params, gran)?;
+    let taux_n1 = build_taux_n1(conn, import_id, &date_clause, &date_params, gran)?;
+    let volumes = build_volumetrie(conn, import_id, &date_clause, &date_params, gran)?;
     let typologie = build_typologie(conn, import_id, meta.has_categorie, &date_clause, &date_params)?;
 
     meta.calcul_duration_ms = start.elapsed().as_millis() as u64;
@@ -1211,7 +1243,7 @@ mod tests {
     #[test]
     fn test_build_meta() {
         let conn = setup_test_db();
-        let kpi = build_dashboard_kpi(&conn, 1, &None, &None).unwrap();
+        let kpi = build_dashboard_kpi(&conn, 1, &None, &None, "month").unwrap();
 
         assert_eq!(kpi.meta.total_tickets, 10);
         assert_eq!(kpi.meta.total_vivants, 3);
@@ -1226,7 +1258,7 @@ mod tests {
     #[test]
     fn test_resolution_mttr() {
         let conn = setup_test_db();
-        let kpi = build_dashboard_kpi(&conn, 1, &None, &None).unwrap();
+        let kpi = build_dashboard_kpi(&conn, 1, &None, &None, "month").unwrap();
 
         // We have 7 terminated tickets with known durations
         assert!(kpi.resolution.echantillon > 0);
@@ -1271,7 +1303,7 @@ mod tests {
             ).unwrap();
         }
 
-        let kpi = build_dashboard_kpi(&conn, 1, &None, &None).unwrap();
+        let kpi = build_dashboard_kpi(&conn, 1, &None, &None, "month").unwrap();
         assert_eq!(kpi.taux_n1.total_termines, 3);
         assert_eq!(kpi.taux_n1.n1_strict.count, 3);
         assert!((kpi.taux_n1.n1_strict.pourcentage - 100.0).abs() < 0.1);
@@ -1283,7 +1315,7 @@ mod tests {
     #[test]
     fn test_taux_n1_mixed() {
         let conn = setup_test_db();
-        let kpi = build_dashboard_kpi(&conn, 1, &None, &None).unwrap();
+        let kpi = build_dashboard_kpi(&conn, 1, &None, &None, "month").unwrap();
 
         assert_eq!(kpi.taux_n1.total_termines, 7);
         assert_eq!(kpi.taux_n1.objectif_itil, 75.0);
@@ -1320,7 +1352,7 @@ mod tests {
     #[test]
     fn test_volumetrie() {
         let conn = setup_test_db();
-        let kpi = build_dashboard_kpi(&conn, 1, &None, &None).unwrap();
+        let kpi = build_dashboard_kpi(&conn, 1, &None, &None, "month").unwrap();
 
         assert!(!kpi.volumes.par_mois.is_empty());
         assert_eq!(kpi.volumes.total_crees, 10);
@@ -1346,7 +1378,7 @@ mod tests {
             [],
         ).unwrap();
 
-        let kpi = build_dashboard_kpi(&conn, 1, &None, &None).unwrap();
+        let kpi = build_dashboard_kpi(&conn, 1, &None, &None, "month").unwrap();
 
         assert_eq!(kpi.meta.total_tickets, 0);
         assert_eq!(kpi.meta.total_vivants, 0);
@@ -1370,13 +1402,14 @@ mod tests {
             1,
             &Some("2025-01-01".to_string()),
             &Some("2025-01-31T23:59:59".to_string()),
+            "month",
         )
         .unwrap();
 
-        // January tickets: IDs 1, 4, 5 → 3 tickets
+        // January tickets opened: IDs 1, 4, 5 → 3 tickets
         assert_eq!(kpi.meta.total_tickets, 3);
-        assert_eq!(kpi.meta.total_vivants, 1); // ticket 1
-        assert_eq!(kpi.meta.total_termines, 2); // tickets 4, 5
+        assert_eq!(kpi.meta.total_vivants, 3); // stock is absolute snapshot (IDs 1, 2, 3)
+        assert_eq!(kpi.meta.total_termines, 2); // tickets 4, 5 terminated in period
 
         // Resolution should only count terminated tickets in January
         assert_eq!(kpi.resolution.echantillon, 2);
@@ -1385,7 +1418,7 @@ mod tests {
     #[test]
     fn test_typologie() {
         let conn = setup_test_db();
-        let kpi = build_dashboard_kpi(&conn, 1, &None, &None).unwrap();
+        let kpi = build_dashboard_kpi(&conn, 1, &None, &None, "month").unwrap();
 
         // par_type should have Incident and Demande
         assert!(!kpi.typologie.par_type.is_empty());
@@ -1408,7 +1441,7 @@ mod tests {
     #[test]
     fn test_prise_en_charge() {
         let conn = setup_test_db();
-        let kpi = build_dashboard_kpi(&conn, 1, &None, &None).unwrap();
+        let kpi = build_dashboard_kpi(&conn, 1, &None, &None, "month").unwrap();
 
         assert_eq!(kpi.prise_en_charge.methode, "proxy_derniere_modification");
         assert_eq!(kpi.prise_en_charge.confiance, "basse");
