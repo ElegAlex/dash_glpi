@@ -16,8 +16,8 @@ function PageHeader() {
   const title = pageTitles[basePath] ?? "PILOTAGE GLPI";
 
   return (
-    <header className="h-14 border-b border-gray-200 bg-white px-6 flex items-center">
-      <h2 className="text-lg font-semibold text-gray-800">{title}</h2>
+    <header className="h-14 border-b border-slate-200/30 bg-white px-6 flex items-center">
+      <h2 className="text-lg font-semibold font-[DM_Sans] text-slate-800">{title}</h2>
     </header>
   );
 }

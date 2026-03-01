@@ -3,7 +3,7 @@
 // RG-045 : min_df=2 pour exclure hapax
 // RG-048 : mots-clés par groupe = agrégation TF-IDF du sous-ensemble
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 // ─────────────────────────────────────────────
 // Structs publiques
@@ -311,6 +311,103 @@ pub fn term_index(result: &TfIdfResult, term: &str) -> Option<usize> {
 }
 
 // ─────────────────────────────────────────────
+// Co-occurrence
+// ─────────────────────────────────────────────
+
+/// A co-occurrence edge between two vocabulary terms.
+#[derive(Debug, Clone)]
+pub struct CooccurrenceEdge {
+    pub term_a: usize,
+    pub term_b: usize,
+    /// Number of documents where both terms co-occur.
+    pub weight: usize,
+}
+
+/// Compute word co-occurrence from the TF-IDF sparse matrix.
+///
+/// 1. Selects the top `top_n_nodes` terms by aggregated TF-IDF score.
+/// 2. For each document, enumerates all pairs of non-zero terms among those nodes.
+/// 3. Counts co-occurrences, filters edges with weight < 2, sorts by weight desc.
+/// 4. Returns (node_indices, edges) capped at `max_edges`.
+pub fn compute_cooccurrences(
+    result: &TfIdfResult,
+    top_n_nodes: usize,
+    max_edges: usize,
+) -> (Vec<usize>, Vec<CooccurrenceEdge>) {
+    if result.vocab_size == 0 {
+        return (Vec::new(), Vec::new());
+    }
+
+    // 1. Aggregate TF-IDF scores per term and pick top N
+    let mut scores = vec![0.0f64; result.vocab_size];
+    for row in result.matrix.outer_iterator() {
+        for (col, val) in row.indices().iter().zip(row.data().iter()) {
+            scores[*col] += *val;
+        }
+    }
+
+    let mut node_indices: Vec<usize> = (0..result.vocab_size).collect();
+    node_indices.sort_by(|&a, &b| {
+        scores[b]
+            .partial_cmp(&scores[a])
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    node_indices.truncate(top_n_nodes);
+
+    let node_set: HashSet<usize> = node_indices.iter().copied().collect();
+
+    // 2. Count co-occurrences across all documents
+    let mut cooc_counts: HashMap<(usize, usize), usize> = HashMap::new();
+    for row in result.matrix.outer_iterator() {
+        let terms_in_doc: Vec<usize> = row
+            .indices()
+            .iter()
+            .filter(|&&idx| node_set.contains(&idx))
+            .copied()
+            .collect();
+
+        for i in 0..terms_in_doc.len() {
+            for j in (i + 1)..terms_in_doc.len() {
+                let (a, b) = if terms_in_doc[i] < terms_in_doc[j] {
+                    (terms_in_doc[i], terms_in_doc[j])
+                } else {
+                    (terms_in_doc[j], terms_in_doc[i])
+                };
+                *cooc_counts.entry((a, b)).or_insert(0) += 1;
+            }
+        }
+    }
+
+    // 3. Filter, sort, truncate
+    let mut edges: Vec<CooccurrenceEdge> = cooc_counts
+        .into_iter()
+        .filter(|(_, w)| *w >= 2)
+        .map(|((a, b), w)| CooccurrenceEdge {
+            term_a: a,
+            term_b: b,
+            weight: w,
+        })
+        .collect();
+
+    edges.sort_by(|a, b| b.weight.cmp(&a.weight));
+    edges.truncate(max_edges);
+
+    (node_indices, edges)
+}
+
+/// Build a mapping from vocabulary index to list of document indices
+/// where that term appears (non-zero TF-IDF value).
+pub fn build_term_to_docs(result: &TfIdfResult) -> Vec<Vec<usize>> {
+    let mut term_docs = vec![Vec::new(); result.vocab_size];
+    for (doc_idx, row) in result.matrix.outer_iterator().enumerate() {
+        for &col in row.indices() {
+            term_docs[col].push(doc_idx);
+        }
+    }
+    term_docs
+}
+
+// ─────────────────────────────────────────────
 // Tests
 // ─────────────────────────────────────────────
 
@@ -553,5 +650,55 @@ mod tests {
             stats.sparsity >= 0.0 && stats.sparsity <= 1.0,
             "sparsity hors [0,1]"
         );
+    }
+
+    #[test]
+    fn test_compute_cooccurrences_basic() {
+        // doc0: a b c, doc1: a b d, doc2: c d e
+        let corpus = vec![
+            vec!["a".into(), "b".into(), "c".into()],
+            vec!["a".into(), "b".into(), "d".into()],
+            vec!["c".into(), "d".into(), "e".into()],
+        ];
+        let result = build_tfidf_matrix(&corpus, 1);
+        let (nodes, edges) = compute_cooccurrences(&result, 5, 100);
+
+        assert!(!nodes.is_empty());
+        // "a" and "b" co-occur in 2 docs → weight = 2
+        let ab_edge = edges.iter().find(|e| {
+            let ta = &result.vocabulary[e.term_a];
+            let tb = &result.vocabulary[e.term_b];
+            (ta == "a" && tb == "b") || (ta == "b" && tb == "a")
+        });
+        assert!(ab_edge.is_some(), "a-b edge should exist");
+        assert_eq!(ab_edge.unwrap().weight, 2);
+    }
+
+    #[test]
+    fn test_compute_cooccurrences_empty() {
+        let corpus: Vec<Vec<String>> = Vec::new();
+        let result = build_tfidf_matrix(&corpus, 1);
+        let (nodes, edges) = compute_cooccurrences(&result, 10, 50);
+        assert!(nodes.is_empty());
+        assert!(edges.is_empty());
+    }
+
+    #[test]
+    fn test_build_term_to_docs() {
+        let corpus = vec![
+            vec!["x".into(), "y".into()],
+            vec!["y".into(), "z".into()],
+            vec!["x".into(), "z".into()],
+        ];
+        let result = build_tfidf_matrix(&corpus, 1);
+        let term_docs = build_term_to_docs(&result);
+
+        let x_idx = result.vocab_index["x"];
+        let y_idx = result.vocab_index["y"];
+        let z_idx = result.vocab_index["z"];
+
+        assert_eq!(term_docs[x_idx].len(), 2); // docs 0, 2
+        assert_eq!(term_docs[y_idx].len(), 2); // docs 0, 1
+        assert_eq!(term_docs[z_idx].len(), 2); // docs 1, 2
     }
 }

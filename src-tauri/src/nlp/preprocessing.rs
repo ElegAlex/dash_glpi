@@ -4,7 +4,7 @@
 //!   HTML removal → template-phrase removal → charabia tokenisation
 //!   → length filter → stop-word filter → Snowball-FR stemming
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
 
 use charabia::Tokenize;
@@ -229,6 +229,67 @@ pub fn preprocess_corpus(texts: &[String], filter: &StopWordFilter) -> Vec<Vec<S
     texts.iter().map(|t| preprocess_text(t, filter)).collect()
 }
 
+/// Like `preprocess_text`, but returns `(stem, original_word)` pairs.
+///
+/// The stems are used for TF-IDF grouping while the original words
+/// are kept for building a reverse stem→word mapping.
+pub fn preprocess_text_with_originals(
+    text: &str,
+    filter: &StopWordFilter,
+) -> Vec<(String, String)> {
+    let after_html = strip_html(text);
+    let after_phrases = filter.remove_phrases(&after_html);
+
+    let stemmer = Stemmer::create(Algorithm::French);
+
+    after_phrases
+        .as_str()
+        .tokenize()
+        .filter(|t| t.is_word())
+        .map(|t| t.lemma().to_lowercase())
+        .filter(|t: &String| t.len() >= 2 && t.len() <= 30)
+        .filter(|t: &String| !filter.is_stop_word(t.as_str()))
+        .map(|original: String| {
+            let stem = stemmer.stem(original.as_str()).to_string();
+            (stem, original)
+        })
+        .filter(|(stem, _)| stem.len() >= 2)
+        .collect()
+}
+
+/// Build a reverse mapping from stems to the most frequent original word.
+///
+/// For each stem, counts how often each original word appears and picks
+/// the most common one. E.g. stem "remplac" → "remplacer" (if most frequent).
+pub fn build_stem_mapping(pairs: &[(String, String)]) -> HashMap<String, String> {
+    let mut counts: HashMap<String, HashMap<String, usize>> = HashMap::new();
+    for (stem, original) in pairs {
+        *counts
+            .entry(stem.clone())
+            .or_default()
+            .entry(original.clone())
+            .or_insert(0) += 1;
+    }
+    counts
+        .into_iter()
+        .map(|(stem, originals)| {
+            let best = originals
+                .into_iter()
+                .max_by_key(|(_, count)| *count)
+                .map(|(word, _)| word)
+                .unwrap_or_else(|| stem.clone());
+            (stem, best)
+        })
+        .collect()
+}
+
+/// Resolve a stem back to its most frequent original word using the mapping.
+///
+/// Returns the original word if found in the mapping, otherwise the stem itself.
+pub fn resolve_stem(stem: &str, mapping: &HashMap<String, String>) -> String {
+    mapping.get(stem).cloned().unwrap_or_else(|| stem.to_string())
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -317,6 +378,43 @@ mod tests {
             tokens.iter().all(|t| t.len() >= 2),
             "All tokens must have length >= 2 (elision residues like 'l' must be absent)"
         );
+    }
+
+    #[test]
+    fn test_preprocess_text_with_originals() {
+        let filter = StopWordFilter::new();
+        let text = "Les imprimantes du bureau ne fonctionnent plus depuis ce matin.";
+        let pairs = preprocess_text_with_originals(text, &filter);
+
+        assert!(!pairs.is_empty(), "Should produce stem-original pairs");
+        for (stem, original) in &pairs {
+            assert!(stem.len() >= 2, "Stem too short: {stem}");
+            assert!(original.len() >= 2, "Original too short: {original}");
+        }
+    }
+
+    #[test]
+    fn test_build_stem_mapping_picks_most_frequent() {
+        let pairs = vec![
+            ("remplac".to_string(), "remplacer".to_string()),
+            ("remplac".to_string(), "remplacer".to_string()),
+            ("remplac".to_string(), "remplacer".to_string()),
+            ("remplac".to_string(), "remplacement".to_string()),
+            ("appliqu".to_string(), "appliquer".to_string()),
+            ("appliqu".to_string(), "application".to_string()),
+            ("appliqu".to_string(), "appliquer".to_string()),
+        ];
+        let mapping = build_stem_mapping(&pairs);
+        assert_eq!(mapping.get("remplac").unwrap(), "remplacer");
+        assert_eq!(mapping.get("appliqu").unwrap(), "appliquer");
+    }
+
+    #[test]
+    fn test_resolve_stem() {
+        let mut mapping = HashMap::new();
+        mapping.insert("remplac".to_string(), "remplacer".to_string());
+        assert_eq!(resolve_stem("remplac", &mapping), "remplacer");
+        assert_eq!(resolve_stem("inconnu", &mapping), "inconnu");
     }
 
     #[test]

@@ -65,6 +65,7 @@ pub fn run() {
             commands::mining::get_clusters,
             commands::mining::detect_anomalies,
             commands::mining::detect_duplicates,
+            commands::mining::get_cooccurrence_network,
             // Export
             commands::export::export_excel_stock,
             commands::export::export_excel_bilan,

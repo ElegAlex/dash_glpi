@@ -714,6 +714,7 @@ pub fn search_tickets_fts(
 /// Construit l'expression SQLite pour la granularité de période.
 fn periode_expr(granularity: &str, col: &str) -> String {
     match granularity {
+        "day" => format!("strftime('%Y-%m-%d', {col})"),
         "week" => format!("strftime('%Y-W%W', {col})"),
         "quarter" => format!(
             "CASE \

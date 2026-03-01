@@ -20,10 +20,10 @@ function ragLevel(total: number): RagLevel {
 }
 
 const RAG_STYLES: Record<RagLevel, string> = {
-  Vert:   'bg-[#f0faf4] text-[#136130] border border-[#18753c]',
-  Jaune:  'bg-[#fef9ec] text-[#965e04] border border-[#b27806]',
-  Orange: 'bg-orange-50 text-[#d4600a] border border-[#d4600a]',
-  Rouge:  'bg-[#fef2f2] text-[#af0400] border border-[#ce0500]',
+  Vert:   'bg-success-50 text-success-500',
+  Jaune:  'bg-accent-50 text-accent-700',
+  Orange: 'bg-warning-50 text-warning-500',
+  Rouge:  'bg-danger-50 text-danger-500',
 };
 
 const columnHelper = createColumnHelper<TechnicianStats>();
@@ -42,7 +42,7 @@ export function TechnicianTable({ data }: TechnicianTableProps) {
         header: 'Technicien',
         cell: (info) => (
           <button
-            className="text-[#0C419A] hover:underline font-medium text-left"
+            className="text-primary-500 hover:underline font-medium text-left"
             onClick={() => navigate(`/stock/${encodeURIComponent(info.getValue())}`)}
           >
             {info.getValue()}
@@ -75,9 +75,9 @@ export function TechnicianTable({ data }: TechnicianTableProps) {
         cell: ({ row }) => {
           const val = row.original.ecartSeuil > 0 ? row.original.ecartSeuil : 0;
           return val > 0 ? (
-            <span className="text-[#af0400] font-medium">{val}</span>
+            <span className="text-danger-500 font-medium">{val}</span>
           ) : (
-            <span className="text-[#6e7891]">0</span>
+            <span className="text-slate-400">0</span>
           );
         },
       }),
@@ -87,7 +87,7 @@ export function TechnicianTable({ data }: TechnicianTableProps) {
         cell: ({ row }) => {
           const level = ragLevel(row.original.total);
           return (
-            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${RAG_STYLES[level]}`}>
+            <span className={`inline-flex items-center rounded-lg px-2 py-0.5 text-xs font-medium ${RAG_STYLES[level]}`}>
               {level}
             </span>
           );
@@ -107,31 +107,31 @@ export function TechnicianTable({ data }: TechnicianTableProps) {
   });
 
   return (
-    <div className="overflow-auto rounded-lg border border-[#e2e6ee] bg-white shadow-[0_1px_3px_0_rgb(26_31_46/0.06)]">
+    <div className="overflow-auto rounded-2xl bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)]">
       <table className="w-full text-sm">
-        <thead className="bg-[#f1f3f7] sticky top-0 z-10">
+        <thead className="bg-slate-50 sticky top-0 z-10">
           {table.getHeaderGroups().map((hg) => (
             <tr key={hg.id}>
               {hg.headers.map((header) => (
                 <th
                   key={header.id}
-                  className="px-4 py-3 text-left text-xs font-medium text-[#525d73] uppercase tracking-wide whitespace-nowrap cursor-pointer select-none"
+                  className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-400 font-[DM_Sans] whitespace-nowrap cursor-pointer select-none"
                   onClick={header.column.getToggleSortingHandler()}
                 >
                   {flexRender(header.column.columnDef.header, header.getContext())}
                   {header.column.getCanSort()
-                    ? ({ asc: ' ↑', desc: ' ↓' }[header.column.getIsSorted() as string] ?? ' ↕')
+                    ? ({ asc: ' \u2191', desc: ' \u2193' }[header.column.getIsSorted() as string] ?? ' \u2195')
                     : null}
                 </th>
               ))}
             </tr>
           ))}
         </thead>
-        <tbody className="divide-y divide-[#e2e6ee]">
+        <tbody>
           {table.getRowModel().rows.map((row) => (
-            <tr key={row.id} className="hover:bg-[#f8f9fb] transition-colors">
+            <tr key={row.id} className="border-b border-slate-50 last:border-0 hover:bg-[rgba(12,65,154,0.04)] transition-colors duration-100">
               {row.getVisibleCells().map((cell) => (
-                <td key={cell.id} className="px-4 py-2 text-[#1a1f2e]">
+                <td key={cell.id} className="px-6 py-3 text-slate-800">
                   {flexRender(cell.column.columnDef.cell, cell.getContext())}
                 </td>
               ))}
@@ -139,7 +139,7 @@ export function TechnicianTable({ data }: TechnicianTableProps) {
           ))}
           {table.getRowModel().rows.length === 0 && (
             <tr>
-              <td colSpan={columns.length} className="px-4 py-8 text-center text-[#6e7891]">
+              <td colSpan={columns.length} className="px-6 py-8 text-center text-slate-400">
                 Aucun technicien
               </td>
             </tr>

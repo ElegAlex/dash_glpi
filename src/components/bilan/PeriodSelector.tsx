@@ -13,12 +13,13 @@ interface PeriodSelectorProps {
 }
 
 const GRANULARITY_LABELS: Record<Granularity, string> = {
+  day: 'Jour',
   week: 'Semaine',
   month: 'Mois',
   quarter: 'Trimestre',
 };
 
-const GRANULARITIES: Granularity[] = ['week', 'month', 'quarter'];
+const GRANULARITIES: Granularity[] = ['day', 'week', 'month', 'quarter'];
 
 export function PeriodSelector({
   range,
@@ -29,21 +30,21 @@ export function PeriodSelector({
   const autoGran = detectGranularity(range.from, range.to);
 
   return (
-    <div className="rounded-lg border border-[#e2e6ee] bg-white shadow-[0_1px_3px_0_rgb(26_31_46/0.06)] p-4">
+    <div className="rounded-2xl bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)] p-4">
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-2">
-          <h3 className="text-sm font-semibold text-[#1a1f2e]">Période d'analyse</h3>
+          <h3 className="text-sm font-semibold font-[DM_Sans] text-slate-800">Periode d'analyse</h3>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-[#6e7891]">Granularité :</span>
-            <div className="flex rounded-md border border-[#cdd3df] overflow-hidden">
+            <span className="text-xs text-slate-400">Granularite :</span>
+            <div className="flex rounded-xl overflow-hidden bg-slate-100">
               {GRANULARITIES.map((g) => (
                 <button
                   key={g}
                   onClick={() => onGranularityChange(g)}
-                  className={`px-3 py-1 text-xs font-medium transition-colors border-r border-[#cdd3df] last:border-r-0 ${
+                  className={`px-3 py-1 text-xs font-medium transition-colors ${
                     granularity === g
-                      ? 'bg-[#0C419A] text-white'
-                      : 'bg-white text-[#525d73] hover:bg-[#f1f3f7]'
+                      ? 'bg-primary-500 text-white shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)]'
+                      : 'text-slate-500 hover:text-slate-800'
                   }`}
                 >
                   {GRANULARITY_LABELS[g]}
@@ -55,15 +56,15 @@ export function PeriodSelector({
 
         <DateRangePicker value={range} onChange={onRangeChange} />
 
-        <div className="text-xs text-[#6e7891]">
-          Granularité auto-détectée :{' '}
-          <span className="font-medium text-[#1a1f2e]">{GRANULARITY_LABELS[autoGran]}</span>
+        <div className="text-xs text-slate-400">
+          Granularite auto-detectee :{' '}
+          <span className="font-medium text-slate-800 font-[DM_Sans]">{GRANULARITY_LABELS[autoGran]}</span>
           {' — '}du{' '}
-          <span className="font-medium text-[#1a1f2e]">
+          <span className="font-medium text-slate-800 font-[DM_Sans]">
             {range.from.toLocaleDateString('fr-FR')}
           </span>{' '}
           au{' '}
-          <span className="font-medium text-[#1a1f2e]">
+          <span className="font-medium text-slate-800 font-[DM_Sans]">
             {range.to.toLocaleDateString('fr-FR')}
           </span>
         </div>

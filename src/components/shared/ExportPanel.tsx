@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { save } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
 import type { ExportResult } from '../../types/config';
+import { Card } from './Card';
 
 interface CardState {
   loading: boolean;
@@ -82,48 +83,56 @@ export function ExportPanel() {
   };
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-      <ExportCard
-        title="Stock Dashboard"
-        description="Vue globale, techniciens et groupes — 3 onglets XLSX."
-        state={stockState}
-        onExport={handleStock}
-        buttonLabel="Exporter le stock"
-      />
+    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+      <div className="animate-fade-slide-up">
+        <ExportCard
+          title="Stock Dashboard"
+          description="Vue globale, techniciens et groupes — 3 onglets XLSX."
+          state={stockState}
+          onExport={handleStock}
+          buttonLabel="Exporter le stock"
+        />
+      </div>
 
-      <ExportCard
-        title="Plan d'action technicien"
-        description="Entretien, tickets et checklist — XLSX individuel."
-        state={planState}
-        onExport={handlePlan}
-        buttonLabel="Exporter"
-        disabled={!technicien.trim()}
-        extra={
-          <input
-            type="text"
-            placeholder="Nom du technicien"
-            value={technicien}
-            onChange={(e) => setTechnicien(e.target.value)}
-            className="w-full rounded-md border border-[#cdd3df] px-3 py-1.5 text-sm text-[#1a1f2e] placeholder-[#6e7891] focus:outline-none focus:ring-2 focus:ring-[#0C419A] focus:border-transparent"
-          />
-        }
-      />
+      <div className="animate-fade-slide-up animation-delay-150">
+        <ExportCard
+          title="Plan d'action technicien"
+          description="Entretien, tickets et checklist — XLSX individuel."
+          state={planState}
+          onExport={handlePlan}
+          buttonLabel="Exporter"
+          disabled={!technicien.trim()}
+          extra={
+            <input
+              type="text"
+              placeholder="Nom du technicien"
+              value={technicien}
+              onChange={(e) => setTechnicien(e.target.value)}
+              className="w-full rounded-lg bg-slate-50 px-3 py-1.5 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+            />
+          }
+        />
+      </div>
 
-      <ExportCard
-        title="Bilan d'activité"
-        description="Flux entrants/sortants, délais et comparatif techniciens."
-        state={bilanState}
-        onExport={handleBilan}
-        buttonLabel="Exporter le bilan"
-      />
+      <div className="animate-fade-slide-up animation-delay-300">
+        <ExportCard
+          title="Bilan d'activite"
+          description="Flux entrants/sortants, delais et comparatif techniciens."
+          state={bilanState}
+          onExport={handleBilan}
+          buttonLabel="Exporter le bilan"
+        />
+      </div>
 
-      <ExportCard
-        title="Tous les plans d'action (ZIP)"
-        description="Archive contenant un XLSX par technicien avec tickets vivants."
-        state={zipState}
-        onExport={handleZip}
-        buttonLabel="Exporter le ZIP"
-      />
+      <div className="animate-fade-slide-up animation-delay-450">
+        <ExportCard
+          title="Tous les plans d'action (ZIP)"
+          description="Archive contenant un XLSX par technicien avec tickets vivants."
+          state={zipState}
+          onExport={handleZip}
+          buttonLabel="Exporter le ZIP"
+        />
+      </div>
     </div>
   );
 }
@@ -148,10 +157,10 @@ function ExportCard({
   extra,
 }: ExportCardProps) {
   return (
-    <div className="rounded-lg border border-[#e2e6ee] bg-white shadow-[0_1px_3px_0_rgb(26_31_46/0.06)] p-5 flex flex-col gap-3">
+    <Card hover className="flex flex-col gap-3 h-full">
       <div>
-        <h3 className="text-sm font-semibold text-[#1a1f2e]">{title}</h3>
-        <p className="mt-0.5 text-xs text-[#6e7891]">{description}</p>
+        <h3 className="text-sm font-semibold font-[DM_Sans] text-slate-800">{title}</h3>
+        <p className="mt-0.5 text-xs text-slate-400">{description}</p>
       </div>
 
       {extra && <div>{extra}</div>}
@@ -159,27 +168,27 @@ function ExportCard({
       <button
         onClick={onExport}
         disabled={state.loading || disabled}
-        className="w-full rounded-md bg-[#0C419A] px-3 py-2 text-sm font-medium text-white hover:bg-[#0a3783] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        className="w-full rounded-xl bg-primary-500 px-3 py-2 text-sm font-medium text-white hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-[0_3px_6px_rgba(0,0,0,0.10),0_2px_4px_rgba(0,0,0,0.06)] hover:shadow-[0_10px_20px_rgba(0,0,0,0.10),0_3px_6px_rgba(0,0,0,0.06)] active:shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)]"
       >
-        {state.loading ? 'Génération en cours…' : buttonLabel}
+        {state.loading ? 'Generation en cours...' : buttonLabel}
       </button>
 
       {state.error && (
-        <div className="rounded-md bg-[#fef2f2] border border-[#ce0500] px-3 py-2 text-xs text-[#af0400]">
+        <div className="rounded-xl bg-danger-50 px-3 py-2 text-xs text-danger-500">
           {state.error}
         </div>
       )}
 
       {state.result && (
-        <div className="rounded-md bg-[#f0faf4] border border-[#009E73] px-3 py-2 text-xs text-[#18753c]">
+        <div className="rounded-xl bg-success-50 px-3 py-2 text-xs text-success-500">
           <div className="font-medium truncate" title={state.result.path}>
             {state.result.path}
           </div>
-          <div className="mt-0.5 text-[#525d73]">
+          <div className="mt-0.5 text-slate-500">
             {formatSize(state.result.sizeBytes)} &middot; {formatDuration(state.result.durationMs)}
           </div>
         </div>
       )}
-    </div>
+    </Card>
   );
 }

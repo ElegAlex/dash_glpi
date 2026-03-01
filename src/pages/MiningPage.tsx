@@ -1,17 +1,23 @@
-import { useState } from "react";
-import { Search, GitBranch, AlertTriangle, Copy } from "lucide-react";
+import { useState, useCallback } from "react";
+import { Search, GitBranch, AlertTriangle, Copy, FileText, Hash, ChevronDown } from "lucide-react";
 import { useInvoke } from "../hooks/useInvoke";
-import WordCloud from "../components/mining/WordCloud";
 import KeywordList from "../components/mining/KeywordList";
+import CooccurrenceNetwork from "../components/mining/CooccurrenceNetwork";
+import DrillDownPanel from "../components/mining/DrillDownPanel";
 import ClusterView from "../components/mining/ClusterView";
 import AnomalyList from "../components/mining/AnomalyList";
 import DuplicateList from "../components/mining/DuplicateList";
+import { Card } from "../components/shared/Card";
+import { KpiCard } from "../components/shared/KpiCard";
 import type {
   TextAnalysisResult,
   TextAnalysisRequest,
   ClusterResult,
   AnomalyAlert,
   DuplicatePair,
+  CooccurrenceResult,
+  CooccurrenceRequest,
+  TicketRef,
 } from "../types/mining";
 
 type Corpus = "titres" | "suivis";
@@ -29,24 +35,15 @@ const SCOPE_LABELS: Record<Scope, string> = {
 };
 
 const MAIN_TABS: { key: MainTab; label: string; icon: React.ReactNode }[] = [
-  { key: "keywords", label: "Mots-clés", icon: <Search size={15} /> },
+  { key: "keywords", label: "Mots-cles", icon: <Search size={15} /> },
   { key: "clusters", label: "Clusters", icon: <GitBranch size={15} /> },
   { key: "anomalies", label: "Anomalies", icon: <AlertTriangle size={15} /> },
   { key: "duplicates", label: "Doublons", icon: <Copy size={15} /> },
 ];
 
-function StatCard({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="flex flex-col gap-1 rounded-lg border-l-4 border-[#0C419A] bg-[#f8f9fb] px-4 py-3">
-      <span className="text-xs text-[#6e7891]">{label}</span>
-      <span className="text-xl font-bold text-[#1a1f2e]">{value}</span>
-    </div>
-  );
-}
-
 function EmptyState({ message }: { message: string }) {
   return (
-    <div className="rounded-xl border border-dashed border-[#cdd3df] bg-white py-16 text-center text-sm text-[#6e7891]">
+    <div className="rounded-2xl bg-white py-16 text-center text-sm text-slate-400 shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)]">
       {message}
     </div>
   );
@@ -54,7 +51,7 @@ function EmptyState({ message }: { message: string }) {
 
 function ErrorBanner({ message }: { message: string }) {
   return (
-    <div className="rounded-md border border-[#ce0500] bg-[#fef2f2] px-4 py-3 text-sm text-[#af0400]">
+    <div className="rounded-2xl bg-danger-50 shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)] px-4 py-3 text-sm text-danger-500">
       {message}
     </div>
   );
@@ -62,8 +59,8 @@ function ErrorBanner({ message }: { message: string }) {
 
 function Spinner({ label }: { label: string }) {
   return (
-    <div className="flex flex-col items-center justify-center py-16 gap-3 text-[#6e7891]">
-      <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#0C419A] border-t-transparent" />
+    <div className="flex flex-col items-center justify-center py-16 gap-3 text-slate-400">
+      <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary-500 border-t-transparent" />
       <span className="text-sm">{label}</span>
     </div>
   );
@@ -73,8 +70,12 @@ function MiningPage() {
   const [mainTab, setMainTab] = useState<MainTab>("keywords");
   const [corpus, setCorpus] = useState<Corpus>("titres");
   const [scope, setScope] = useState<Scope>("global");
+  const [includeResolved, setIncludeResolved] = useState(false);
+  const [showNetwork, setShowNetwork] = useState(false);
+  const [drillDown, setDrillDown] = useState<{ title: string; tickets: TicketRef[] } | null>(null);
 
   const analysisHook = useInvoke<TextAnalysisResult>();
+  const coocHook = useInvoke<CooccurrenceResult>();
   const clusterHook = useInvoke<ClusterResult>();
   const anomalyHook = useInvoke<AnomalyAlert[]>();
   const duplicateHook = useInvoke<DuplicatePair[]>();
@@ -84,7 +85,8 @@ function MiningPage() {
       corpus,
       scope,
       groupBy: scope === "group" ? "groupe_principal" : undefined,
-      topN: 50,
+      topN: 100,
+      includeResolved,
     };
     analysisHook.execute("run_text_analysis", { request });
   };
@@ -101,219 +103,354 @@ function MiningPage() {
     duplicateHook.execute("detect_duplicates", {});
   };
 
+  const handleCooccurrence = () => {
+    const request: CooccurrenceRequest = {
+      topNNodes: 80,
+      maxEdges: 200,
+      includeResolved,
+    };
+    coocHook.execute("get_cooccurrence_network", { request });
+  };
+
+  const handleNodeClick = useCallback(
+    (word: string) => {
+      if (!coocHook.data) return;
+      const tickets = coocHook.data.ticketMap[word] ?? [];
+      setDrillDown({ title: `Tickets contenant "${word}"`, tickets });
+    },
+    [coocHook.data],
+  );
+
+  const handleEdgeClick = useCallback(
+    (source: string, target: string) => {
+      if (!coocHook.data) return;
+      const ticketsA = new Set((coocHook.data.ticketMap[source] ?? []).map((t) => t.id));
+      const ticketsB = coocHook.data.ticketMap[target] ?? [];
+      const intersection = ticketsB.filter((t) => ticketsA.has(t.id));
+      setDrillDown({
+        title: `Tickets contenant "${source}" et "${target}"`,
+        tickets: intersection,
+      });
+    },
+    [coocHook.data],
+  );
+
   const result = analysisHook.data;
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <Search size={22} className="text-[#0C419A]" />
-        <h1 className="text-2xl font-semibold text-[#1a1f2e]">Text Mining</h1>
-      </div>
+    <div>
+      <header className="sticky top-0 z-10 bg-[#F5F7FA]/80 backdrop-blur-sm px-8 pt-6 pb-4 border-b border-slate-200/30">
+        <h1 className="text-2xl font-bold font-[DM_Sans] text-slate-800 tracking-tight">
+          Text Mining
+        </h1>
+        <p className="text-sm text-slate-400 mt-1">
+          Analyse textuelle des tickets par TF-IDF, clustering et detection d'anomalies
+        </p>
+      </header>
 
-      {/* Main tabs */}
-      <div className="border-b border-[#e2e6ee] bg-white">
-        <div className="flex gap-0">
-          {MAIN_TABS.map(({ key, label, icon }) => (
-            <button
-              key={key}
-              onClick={() => setMainTab(key)}
-              className={`flex items-center gap-2 px-5 py-3 text-sm font-medium transition-colors ${
-                mainTab === key
-                  ? "border-b-2 border-[#0C419A] text-[#0C419A]"
-                  : "text-[#6e7891] hover:text-[#1a1f2e]"
-              }`}
-            >
-              {icon}
-              {label}
-            </button>
-          ))}
+      <div className="px-8 pb-8 pt-6 space-y-6">
+        {/* Main tabs */}
+        <div className="animate-fade-slide-up">
+          <div className="bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)] overflow-hidden">
+            <div className="flex gap-0">
+              {MAIN_TABS.map(({ key, label, icon }) => (
+                <button
+                  key={key}
+                  onClick={() => setMainTab(key)}
+                  className={`flex items-center gap-2 px-5 py-3 text-sm font-medium transition-colors ${
+                    mainTab === key
+                      ? "border-b-2 border-primary-500 text-primary-500"
+                      : "text-slate-400 hover:text-slate-800"
+                  }`}
+                >
+                  {icon}
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
-      </div>
 
-      {/* ── Tab: Mots-clés ── */}
-      {mainTab === "keywords" && (
-        <div className="space-y-6">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="flex flex-wrap items-center gap-6">
-              {/* Corpus sub-tabs */}
-              <div className="flex gap-1 border-b border-[#e2e6ee]">
-                {(Object.keys(CORPUS_LABELS) as Corpus[]).map((c) => (
+        {/* Tab: Mots-cles */}
+        {mainTab === "keywords" && (
+          <div className="space-y-6">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex flex-wrap items-center gap-6">
+                {/* Corpus sub-tabs */}
+                <div className="flex gap-1 bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)] p-1">
+                  {(Object.keys(CORPUS_LABELS) as Corpus[]).map((c) => (
+                    <button
+                      key={c}
+                      onClick={() => setCorpus(c)}
+                      className={`px-4 py-2 text-sm rounded-xl transition-all duration-150 ${
+                        corpus === c
+                          ? "bg-primary-500 text-white font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)]"
+                          : "text-slate-500 hover:text-slate-800"
+                      }`}
+                    >
+                      {CORPUS_LABELS[c]}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Scope sub-tabs */}
+                <div className="flex gap-1 bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)] p-1">
+                  {(Object.keys(SCOPE_LABELS) as Scope[]).map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => setScope(s)}
+                      className={`px-4 py-2 text-sm rounded-xl transition-all duration-150 ${
+                        scope === s
+                          ? "bg-primary-500 text-white font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)]"
+                          : "text-slate-500 hover:text-slate-800"
+                      }`}
+                    >
+                      {SCOPE_LABELS[s]}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Toggle vivants / tous */}
+                <div className="flex gap-1 bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)] p-1">
                   <button
-                    key={c}
-                    onClick={() => setCorpus(c)}
-                    className={`px-4 py-2 text-sm transition-colors ${
-                      corpus === c
-                        ? "border-b-2 border-[#0C419A] font-medium text-[#0C419A]"
-                        : "text-[#6e7891] hover:text-[#1a1f2e]"
+                    onClick={() => setIncludeResolved(false)}
+                    className={`px-4 py-2 text-sm rounded-xl transition-all duration-150 ${
+                      !includeResolved
+                        ? "bg-primary-500 text-white font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)]"
+                        : "text-slate-500 hover:text-slate-800"
                     }`}
                   >
-                    {CORPUS_LABELS[c]}
+                    En cours
                   </button>
-                ))}
-              </div>
-
-              {/* Scope sub-tabs */}
-              <div className="flex gap-1 border-b border-[#e2e6ee]">
-                {(Object.keys(SCOPE_LABELS) as Scope[]).map((s) => (
                   <button
-                    key={s}
-                    onClick={() => setScope(s)}
-                    className={`px-4 py-2 text-sm transition-colors ${
-                      scope === s
-                        ? "border-b-2 border-[#0C419A] font-medium text-[#0C419A]"
-                        : "text-[#6e7891] hover:text-[#1a1f2e]"
+                    onClick={() => setIncludeResolved(true)}
+                    className={`px-4 py-2 text-sm rounded-xl transition-all duration-150 ${
+                      includeResolved
+                        ? "bg-primary-500 text-white font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)]"
+                        : "text-slate-500 hover:text-slate-800"
                     }`}
                   >
-                    {SCOPE_LABELS[s]}
+                    Tous les tickets
                   </button>
-                ))}
+                </div>
               </div>
+
+              <button
+                onClick={handleAnalyze}
+                disabled={analysisHook.loading}
+                className="rounded-xl bg-primary-500 px-4 py-2 text-sm font-medium text-white hover:bg-primary-600 disabled:opacity-50 transition-colors shadow-[0_3px_6px_rgba(0,0,0,0.10),0_2px_4px_rgba(0,0,0,0.06)]"
+              >
+                {analysisHook.loading ? "Analyse en cours..." : "Analyser le corpus"}
+              </button>
             </div>
 
-            <button
-              onClick={handleAnalyze}
-              disabled={analysisHook.loading}
-              className="rounded-lg bg-[#0C419A] px-4 py-2 text-sm font-medium text-white hover:bg-[#0a3480] disabled:opacity-50 transition-colors"
-            >
-              {analysisHook.loading ? "Analyse en cours…" : "Analyser le corpus"}
-            </button>
-          </div>
+            {analysisHook.error && <ErrorBanner message={analysisHook.error} />}
+            {analysisHook.loading && <Spinner label="Analyse en cours..." />}
 
-          {analysisHook.error && <ErrorBanner message={analysisHook.error} />}
-          {analysisHook.loading && <Spinner label="Analyse en cours…" />}
+            {!analysisHook.loading && !result && !analysisHook.error && (
+              <EmptyState message="Cliquez sur Analyser le corpus pour lancer l'extraction de mots-cles" />
+            )}
 
-          {!analysisHook.loading && !result && !analysisHook.error && (
-            <EmptyState message="Cliquez sur Analyser le corpus pour lancer l'extraction de mots-clés" />
-          )}
+            {result && !analysisHook.loading && (
+              <div className="space-y-6">
+                <div className="grid grid-cols-2 gap-5 sm:grid-cols-4">
+                  <KpiCard
+                    label="Documents"
+                    value={result.corpusStats.totalDocuments}
+                    icon={<FileText size={18} className="text-primary-500" />}
+                    accentColor="#0C419A"
+                  />
+                  <KpiCard
+                    label="Tokens"
+                    value={result.corpusStats.totalTokens}
+                    icon={<Hash size={18} className="text-emerald-600" />}
+                    accentColor="#2E7D32"
+                  />
+                  <KpiCard
+                    label="Vocabulaire"
+                    value={result.corpusStats.vocabularySize}
+                    icon={<Search size={18} className="text-purple-600" />}
+                    accentColor="#6A1B9A"
+                  />
+                  <KpiCard
+                    label="Tokens / doc"
+                    value={result.corpusStats.avgTokensPerDoc.toFixed(1)}
+                    accentColor="#FF8F00"
+                  />
+                </div>
 
-          {result && !analysisHook.loading && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <StatCard label="Documents" value={result.corpusStats.totalDocuments.toLocaleString("fr-FR")} />
-                <StatCard label="Tokens" value={result.corpusStats.totalTokens.toLocaleString("fr-FR")} />
-                <StatCard label="Vocabulaire" value={result.corpusStats.vocabularySize.toLocaleString("fr-FR")} />
-                <StatCard label="Tokens / doc (moy.)" value={result.corpusStats.avgTokensPerDoc.toFixed(1)} />
-              </div>
+                {scope === "global" && result.keywords.length > 0 && (
+                  <div className="space-y-5">
+                    <KeywordList
+                      keywords={result.keywords}
+                      title="Mots-cles extraits"
+                      maxItems={30}
+                      onKeywordClick={(word) => {
+                        const tickets = result.ticketMap[word] ?? [];
+                        setDrillDown({ title: `Tickets contenant "${word}"`, tickets });
+                      }}
+                    />
 
-              {scope === "global" && result.keywords.length > 0 && (
-                <div className="flex flex-col gap-4 lg:flex-row">
-                  <div className="flex-1 rounded-xl border border-[#e2e6ee] bg-white p-4 shadow-sm overflow-hidden">
-                    <h2 className="mb-3 text-sm font-semibold text-[#1a1f2e]">
-                      Nuage de mots — Top 50
-                    </h2>
-                    <div className="flex justify-center">
-                      <WordCloud keywords={result.keywords} width={700} height={380} />
+                    <Card className="overflow-hidden">
+                      <div className="flex items-center justify-between">
+                        <button
+                          onClick={() => setShowNetwork(!showNetwork)}
+                          className="flex items-center gap-2 text-left"
+                        >
+                          <h2 className="text-lg font-semibold font-[DM_Sans] text-slate-700">
+                            Reseau de co-occurrences
+                          </h2>
+                          <ChevronDown
+                            size={18}
+                            className={`text-slate-400 transition-transform duration-200 ${
+                              showNetwork ? "rotate-180" : ""
+                            }`}
+                          />
+                        </button>
+                        {showNetwork && !coocHook.data && (
+                          <button
+                            onClick={handleCooccurrence}
+                            disabled={coocHook.loading}
+                            className="rounded-xl bg-primary-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-600 disabled:opacity-50 transition-colors"
+                          >
+                            {coocHook.loading ? "Generation..." : "Generer le reseau"}
+                          </button>
+                        )}
+                      </div>
+                      {showNetwork && (
+                        <div className="mt-4">
+                          {coocHook.loading && <Spinner label="Calcul des co-occurrences..." />}
+                          {coocHook.error && <ErrorBanner message={coocHook.error} />}
+                          {coocHook.data && !coocHook.loading && (
+                            <CooccurrenceNetwork
+                              data={coocHook.data}
+                              height={500}
+                              onNodeClick={handleNodeClick}
+                              onEdgeClick={handleEdgeClick}
+                            />
+                          )}
+                          {!coocHook.data && !coocHook.loading && !coocHook.error && (
+                            <p className="py-8 text-center text-sm text-slate-400">
+                              Cliquez sur Generer le reseau pour visualiser les connexions entre mots
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </Card>
+                  </div>
+                )}
+
+                {scope === "group" && result.byGroup && result.byGroup.length > 0 && (
+                  <div className="space-y-4">
+                    <h2 className="text-lg font-semibold font-[DM_Sans] text-slate-700">Mots-cles par groupe</h2>
+                    <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+                      {result.byGroup.map((group) => (
+                        <Card key={group.groupName}>
+                          <div className="mb-2 flex items-center justify-between">
+                            <h3 className="text-sm font-semibold font-[DM_Sans] text-slate-700 truncate">{group.groupName}</h3>
+                            <span className="shrink-0 ml-2 text-xs text-slate-400">
+                              {group.ticketCount} ticket{group.ticketCount > 1 ? "s" : ""}
+                            </span>
+                          </div>
+                          <KeywordList keywords={group.keywords} title="" maxItems={10} />
+                        </Card>
+                      ))}
                     </div>
                   </div>
-                  <div className="w-full lg:w-80 shrink-0">
-                    <KeywordList keywords={result.keywords} title="Top 20 mots-clés" maxItems={20} />
-                  </div>
-                </div>
-              )}
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
-              {scope === "group" && result.byGroup && result.byGroup.length > 0 && (
-                <div className="space-y-4">
-                  <h2 className="text-base font-semibold text-[#1a1f2e]">Mots-clés par groupe</h2>
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-                    {result.byGroup.map((group) => (
-                      <div key={group.groupName} className="rounded-xl border border-[#e2e6ee] bg-white p-4 shadow-sm">
-                        <div className="mb-2 flex items-center justify-between">
-                          <h3 className="text-sm font-semibold text-[#1a1f2e] truncate">{group.groupName}</h3>
-                          <span className="shrink-0 ml-2 text-xs text-[#6e7891]">
-                            {group.ticketCount} ticket{group.ticketCount > 1 ? "s" : ""}
-                          </span>
-                        </div>
-                        <KeywordList keywords={group.keywords} title="" maxItems={10} />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+        {/* Tab: Clusters */}
+        {mainTab === "clusters" && (
+          <div className="space-y-6">
+            <div className="flex justify-end">
+              <button
+                onClick={handleCluster}
+                disabled={clusterHook.loading}
+                className="rounded-xl bg-primary-500 px-4 py-2 text-sm font-medium text-white hover:bg-primary-600 disabled:opacity-50 transition-colors shadow-[0_3px_6px_rgba(0,0,0,0.10),0_2px_4px_rgba(0,0,0,0.06)]"
+              >
+                {clusterHook.loading ? "Clustering en cours..." : "Lancer le clustering"}
+              </button>
             </div>
-          )}
-        </div>
-      )}
 
-      {/* ── Tab: Clusters ── */}
-      {mainTab === "clusters" && (
-        <div className="space-y-6">
-          <div className="flex justify-end">
-            <button
-              onClick={handleCluster}
-              disabled={clusterHook.loading}
-              className="rounded-lg bg-[#0C419A] px-4 py-2 text-sm font-medium text-white hover:bg-[#0a3480] disabled:opacity-50 transition-colors"
-            >
-              {clusterHook.loading ? "Clustering en cours…" : "Lancer le clustering"}
-            </button>
+            {clusterHook.error && <ErrorBanner message={clusterHook.error} />}
+            {clusterHook.loading && <Spinner label="Clustering en cours..." />}
+
+            {!clusterHook.loading && !clusterHook.data && !clusterHook.error && (
+              <EmptyState message="Cliquez sur Lancer le clustering pour grouper les tickets par thematique" />
+            )}
+
+            {clusterHook.data && !clusterHook.loading && (
+              <ClusterView
+                clusters={clusterHook.data.clusters}
+                silhouetteScore={clusterHook.data.silhouetteScore}
+              />
+            )}
           </div>
+        )}
 
-          {clusterHook.error && <ErrorBanner message={clusterHook.error} />}
-          {clusterHook.loading && <Spinner label="Clustering en cours…" />}
+        {/* Tab: Anomalies */}
+        {mainTab === "anomalies" && (
+          <div className="space-y-6">
+            <div className="flex justify-end">
+              <button
+                onClick={handleAnomalies}
+                disabled={anomalyHook.loading}
+                className="rounded-xl bg-primary-500 px-4 py-2 text-sm font-medium text-white hover:bg-primary-600 disabled:opacity-50 transition-colors shadow-[0_3px_6px_rgba(0,0,0,0.10),0_2px_4px_rgba(0,0,0,0.06)]"
+              >
+                {anomalyHook.loading ? "Detection en cours..." : "Detecter les anomalies"}
+              </button>
+            </div>
 
-          {!clusterHook.loading && !clusterHook.data && !clusterHook.error && (
-            <EmptyState message="Cliquez sur Lancer le clustering pour grouper les tickets par thématique" />
-          )}
+            {anomalyHook.error && <ErrorBanner message={anomalyHook.error} />}
+            {anomalyHook.loading && <Spinner label="Detection d'anomalies en cours..." />}
 
-          {clusterHook.data && !clusterHook.loading && (
-            <ClusterView
-              clusters={clusterHook.data.clusters}
-              silhouetteScore={clusterHook.data.silhouetteScore}
-            />
-          )}
-        </div>
-      )}
+            {!anomalyHook.loading && !anomalyHook.data && !anomalyHook.error && (
+              <EmptyState message="Cliquez sur Detecter les anomalies pour identifier les tickets hors normes" />
+            )}
 
-      {/* ── Tab: Anomalies ── */}
-      {mainTab === "anomalies" && (
-        <div className="space-y-6">
-          <div className="flex justify-end">
-            <button
-              onClick={handleAnomalies}
-              disabled={anomalyHook.loading}
-              className="rounded-lg bg-[#0C419A] px-4 py-2 text-sm font-medium text-white hover:bg-[#0a3480] disabled:opacity-50 transition-colors"
-            >
-              {anomalyHook.loading ? "Détection en cours…" : "Détecter les anomalies"}
-            </button>
+            {anomalyHook.data && !anomalyHook.loading && (
+              <AnomalyList anomalies={anomalyHook.data} />
+            )}
           </div>
+        )}
 
-          {anomalyHook.error && <ErrorBanner message={anomalyHook.error} />}
-          {anomalyHook.loading && <Spinner label="Détection d'anomalies en cours…" />}
+        {/* Tab: Doublons */}
+        {mainTab === "duplicates" && (
+          <div className="space-y-6">
+            <div className="flex justify-end">
+              <button
+                onClick={handleDuplicates}
+                disabled={duplicateHook.loading}
+                className="rounded-xl bg-primary-500 px-4 py-2 text-sm font-medium text-white hover:bg-primary-600 disabled:opacity-50 transition-colors shadow-[0_3px_6px_rgba(0,0,0,0.10),0_2px_4px_rgba(0,0,0,0.06)]"
+              >
+                {duplicateHook.loading ? "Recherche en cours..." : "Chercher les doublons"}
+              </button>
+            </div>
 
-          {!anomalyHook.loading && !anomalyHook.data && !anomalyHook.error && (
-            <EmptyState message="Cliquez sur Détecter les anomalies pour identifier les tickets hors normes" />
-          )}
+            {duplicateHook.error && <ErrorBanner message={duplicateHook.error} />}
+            {duplicateHook.loading && <Spinner label="Recherche de doublons en cours..." />}
 
-          {anomalyHook.data && !anomalyHook.loading && (
-            <AnomalyList anomalies={anomalyHook.data} />
-          )}
-        </div>
-      )}
+            {!duplicateHook.loading && !duplicateHook.data && !duplicateHook.error && (
+              <EmptyState message="Cliquez sur Chercher les doublons pour trouver les tickets similaires" />
+            )}
 
-      {/* ── Tab: Doublons ── */}
-      {mainTab === "duplicates" && (
-        <div className="space-y-6">
-          <div className="flex justify-end">
-            <button
-              onClick={handleDuplicates}
-              disabled={duplicateHook.loading}
-              className="rounded-lg bg-[#0C419A] px-4 py-2 text-sm font-medium text-white hover:bg-[#0a3480] disabled:opacity-50 transition-colors"
-            >
-              {duplicateHook.loading ? "Recherche en cours…" : "Chercher les doublons"}
-            </button>
+            {duplicateHook.data && !duplicateHook.loading && (
+              <DuplicateList duplicates={duplicateHook.data} />
+            )}
           </div>
+        )}
+      </div>
 
-          {duplicateHook.error && <ErrorBanner message={duplicateHook.error} />}
-          {duplicateHook.loading && <Spinner label="Recherche de doublons en cours…" />}
-
-          {!duplicateHook.loading && !duplicateHook.data && !duplicateHook.error && (
-            <EmptyState message="Cliquez sur Chercher les doublons pour trouver les tickets similaires" />
-          )}
-
-          {duplicateHook.data && !duplicateHook.loading && (
-            <DuplicateList duplicates={duplicateHook.data} />
-          )}
-        </div>
+      {drillDown && (
+        <DrillDownPanel
+          title={drillDown.title}
+          tickets={drillDown.tickets}
+          onClose={() => setDrillDown(null)}
+        />
       )}
     </div>
   );

@@ -3,7 +3,9 @@ use chrono::{Datelike, Duration, NaiveDate, NaiveDateTime};
 /// Determines granularity automatically based on number of days in range.
 /// < 30 days → "week", < 365 days → "month", else → "quarter"
 pub fn auto_granularity(days: i64) -> String {
-    if days < 30 {
+    if days <= 14 {
+        "day".to_string()
+    } else if days < 30 {
         "week".to_string()
     } else if days < 365 {
         "month".to_string()
@@ -21,10 +23,31 @@ pub fn generate_period_keys(
     granularity: &str,
 ) -> Vec<(String, String, NaiveDateTime, NaiveDateTime)> {
     match granularity {
+        "day" => generate_day_keys(date_from, date_to),
         "week" => generate_week_keys(date_from, date_to),
         "quarter" => generate_quarter_keys(date_from, date_to),
         _ => generate_month_keys(date_from, date_to),
     }
+}
+
+fn generate_day_keys(
+    date_from: NaiveDateTime,
+    date_to: NaiveDateTime,
+) -> Vec<(String, String, NaiveDateTime, NaiveDateTime)> {
+    let mut result = Vec::new();
+    let mut current = date_from.date();
+    let end = date_to.date();
+
+    while current <= end {
+        let period_key = current.format("%Y-%m-%d").to_string();
+        let period_label = format!("{:02}/{:02}", current.day(), current.month());
+        let start = current.and_hms_opt(0, 0, 0).unwrap();
+        let end_dt = current.and_hms_opt(23, 59, 59).unwrap();
+        result.push((period_key, period_label, start, end_dt));
+        current += Duration::days(1);
+    }
+
+    result
 }
 
 fn generate_week_keys(
@@ -175,8 +198,15 @@ mod tests {
     }
 
     #[test]
+    fn test_auto_granularity_day() {
+        assert_eq!(auto_granularity(1), "day");
+        assert_eq!(auto_granularity(7), "day");
+        assert_eq!(auto_granularity(14), "day");
+    }
+
+    #[test]
     fn test_auto_granularity_week() {
-        assert_eq!(auto_granularity(7), "week");
+        assert_eq!(auto_granularity(15), "week");
         assert_eq!(auto_granularity(29), "week");
     }
 

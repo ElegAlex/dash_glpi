@@ -4,7 +4,7 @@ import { fr } from 'react-day-picker/locale';
 import { subDays, startOfQuarter, endOfQuarter, subQuarters, differenceInDays } from 'date-fns';
 import 'react-day-picker/style.css';
 
-export type Granularity = 'week' | 'month' | 'quarter';
+export type Granularity = 'day' | 'week' | 'month' | 'quarter';
 
 export interface DateRange {
   from: Date;
@@ -13,6 +13,7 @@ export interface DateRange {
 
 export function detectGranularity(from: Date, to: Date): Granularity {
   const days = differenceInDays(to, from);
+  if (days <= 14) return 'day';
   if (days < 30) return 'week';
   if (days < 365) return 'month';
   return 'quarter';
@@ -83,10 +84,10 @@ export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
           <button
             key={p.id}
             onClick={() => handlePreset(p.id)}
-            className={`text-left px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+            className={`text-left px-3 py-2 rounded-xl text-sm font-medium transition-colors ${
               activePreset === p.id
-                ? 'bg-[#0C419A] text-white'
-                : 'text-[#525d73] hover:bg-[#f1f3f7] hover:text-[#1a1f2e]'
+                ? 'bg-primary-500 text-white'
+                : 'text-slate-500 hover:bg-[rgba(12,65,154,0.04)] hover:text-slate-800'
             }`}
           >
             {p.label}
@@ -95,7 +96,7 @@ export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
       </div>
 
       {showCalendar && (
-        <div className="border border-[#e2e6ee] rounded-lg bg-white shadow-[0_4px_6px_-1px_rgb(26_31_46/0.06)] p-3">
+        <div className="rounded-2xl bg-white shadow-[0_10px_20px_rgba(0,0,0,0.10),0_3px_6px_rgba(0,0,0,0.06)] p-3">
           <DayPicker
             mode="range"
             locale={fr}

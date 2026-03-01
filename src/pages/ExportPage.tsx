@@ -2,14 +2,19 @@ import { ExportPanel } from '../components/shared/ExportPanel';
 
 function ExportPage() {
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-[#1a1f2e]">Exports Excel</h1>
-        <p className="mt-0.5 text-sm text-[#525d73]">
-          Générez des fichiers Excel et ZIP prêts à diffuser depuis les données du dernier import.
+    <div>
+      <header className="sticky top-0 z-10 bg-[#F5F7FA]/80 backdrop-blur-sm px-8 pt-6 pb-4 border-b border-slate-200/30">
+        <h1 className="text-2xl font-bold font-[DM_Sans] text-slate-800 tracking-tight">
+          Exports Excel
+        </h1>
+        <p className="text-sm text-slate-400 mt-1">
+          Generez des fichiers Excel et ZIP prets a diffuser depuis les donnees du dernier import
         </p>
+      </header>
+
+      <div className="px-8 pb-8 pt-6 space-y-6">
+        <ExportPanel />
       </div>
-      <ExportPanel />
     </div>
   );
 }

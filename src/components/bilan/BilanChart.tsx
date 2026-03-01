@@ -3,6 +3,7 @@ import * as echarts from 'echarts/core';
 import { DataZoomComponent } from 'echarts/components';
 import { useECharts } from '../../hooks/useECharts';
 import type { PeriodData } from '../../types/kpi';
+import '../../lib/echarts-theme';
 
 echarts.use([DataZoomComponent]);
 
@@ -40,18 +41,26 @@ export function BilanChart({ periodes }: BilanChartProps) {
         top: 4,
       },
       grid: {
-        top: 56,
+        top: 60,
         bottom: 80,
-        left: 56,
-        right: needSecondaryAxis ? 60 : 24,
+        left: 60,
+        right: needSecondaryAxis ? 60 : 30,
+        containLabel: false,
       },
       xAxis: {
         type: 'category',
         data: labels,
-        axisLabel: { rotate: labels.length > 12 ? 45 : 0 },
+        axisLabel: { rotate: labels.length > 12 ? 35 : 0, fontSize: 11 },
       },
       yAxis: [
-        { type: 'value', name: 'Tickets', minInterval: 1 },
+        {
+          type: 'value',
+          name: 'Tickets',
+          minInterval: 1,
+          axisLabel: {
+            formatter: (v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v),
+          },
+        },
         needSecondaryAxis
           ? { type: 'value', name: 'Stock', position: 'right', splitLine: { show: false } }
           : { type: 'value', show: false },
@@ -65,14 +74,34 @@ export function BilanChart({ periodes }: BilanChartProps) {
           name: 'Entrants',
           type: 'bar',
           data: entrees,
-          itemStyle: { color: '#0C419A' },
           barGap: '10%',
+          itemStyle: {
+            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+              { offset: 0, color: '#1976D2' },
+              { offset: 1, color: '#1565C0' },
+            ]),
+            borderRadius: [6, 6, 0, 0],
+          },
+          emphasis: {
+            itemStyle: {
+              color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                { offset: 0, color: '#42A5F5' },
+                { offset: 1, color: '#1976D2' },
+              ]),
+            },
+          },
         },
         {
           name: 'Sortants',
           type: 'bar',
           data: sorties,
-          itemStyle: { color: '#009E73' },
+          itemStyle: {
+            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+              { offset: 0, color: '#43A047' },
+              { offset: 1, color: '#2E7D32' },
+            ]),
+            borderRadius: [6, 6, 0, 0],
+          },
         },
         ...(hasStock
           ? [
@@ -82,10 +111,16 @@ export function BilanChart({ periodes }: BilanChartProps) {
                 data: stockCumule,
                 yAxisIndex: needSecondaryAxis ? 1 : 0,
                 smooth: true,
-                itemStyle: { color: '#E69F00' },
-                lineStyle: { width: 2 },
                 symbol: 'circle',
-                symbolSize: 5,
+                symbolSize: 7,
+                lineStyle: { width: 3, color: '#FF8F00' },
+                itemStyle: { color: '#FF8F00', borderColor: '#FFF', borderWidth: 2 },
+                areaStyle: {
+                  color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                    { offset: 0, color: 'rgba(255,143,0,0.15)' },
+                    { offset: 1, color: 'rgba(255,143,0,0.02)' },
+                  ]),
+                },
               },
             ]
           : []),
@@ -93,7 +128,7 @@ export function BilanChart({ periodes }: BilanChartProps) {
     };
   }, [periodes]);
 
-  const { chartRef } = useECharts(option);
+  const { chartRef } = useECharts(option, undefined, 'cpam-material');
 
   return <div ref={chartRef} style={{ height: '360px', width: '100%' }} />;
 }

@@ -28,23 +28,23 @@ function TagList({
 
   return (
     <div>
-      <label className="block text-sm font-medium text-[#1a1f2e] mb-2">
+      <label className="block text-sm font-medium text-slate-800 mb-2">
         {label}
       </label>
       <div className="flex flex-wrap gap-2 mb-2">
         {tags.map((tag) => (
           <span
             key={tag}
-            className="inline-flex items-center gap-1 px-2 py-1 rounded bg-[#eef2fb] text-[#1a1f2e] text-sm"
+            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-primary-50 text-slate-800 text-sm"
           >
             {tag}
             <button
               type="button"
               onClick={() => removeTag(tag)}
-              className="text-[#525d73] hover:text-red-600 leading-none"
+              className="text-slate-500 hover:text-danger-500 leading-none"
               aria-label={`Supprimer ${tag}`}
             >
-              ×
+              x
             </button>
           </span>
         ))}
@@ -60,13 +60,13 @@ function TagList({
               addTag();
             }
           }}
-          className="flex-1 border border-[#e2e6ee] rounded px-3 py-1.5 text-sm text-[#1a1f2e] focus:outline-none focus:border-[#0C419A]"
-          placeholder="Nouveau statut…"
+          className="flex-1 rounded-lg bg-white px-3 py-1.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+          placeholder="Nouveau statut..."
         />
         <button
           type="button"
           onClick={addTag}
-          className="px-3 py-1.5 rounded bg-[#0C419A] hover:bg-[#0a3783] text-white text-sm"
+          className="px-3 py-1.5 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-sm shadow-[0_3px_6px_rgba(0,0,0,0.10),0_2px_4px_rgba(0,0,0,0.06)]"
         >
           +
         </button>
@@ -88,7 +88,7 @@ function NumberField({
 }) {
   return (
     <div>
-      <label className="block text-sm font-medium text-[#1a1f2e] mb-1">
+      <label className="block text-sm font-medium text-slate-800 mb-1">
         {label}
       </label>
       <input
@@ -96,14 +96,14 @@ function NumberField({
         min={0}
         value={value}
         onChange={(e) => onChange(Math.max(0, Number(e.target.value)))}
-        className="w-32 border border-[#e2e6ee] rounded px-3 py-1.5 text-sm text-[#1a1f2e] focus:outline-none focus:border-[#0C419A]"
+        className="w-32 rounded-lg bg-white px-3 py-1.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
       />
-      {help && <p className="mt-1 text-xs text-[#525d73]">{help}</p>}
+      {help && <p className="mt-1 text-xs text-slate-400">{help}</p>}
     </div>
   );
 }
 
-function Card({
+function SettingsCard({
   title,
   children,
 }: {
@@ -111,8 +111,8 @@ function Card({
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-white border border-[#e2e6ee] rounded-lg p-6">
-      <h2 className="text-base font-semibold text-[#1a1f2e] mb-4">{title}</h2>
+    <div className="bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)] p-6">
+      <h2 className="text-lg font-semibold font-[DM_Sans] text-slate-700 mb-4">{title}</h2>
       {children}
     </div>
   );
@@ -145,7 +145,7 @@ function SettingsPage() {
     setMessage(null);
     try {
       await invoke("update_config", { config: form });
-      setMessage({ type: "success", text: "Configuration enregistrée" });
+      setMessage({ type: "success", text: "Configuration enregistree" });
       loadConfig("get_config");
     } catch (err) {
       setMessage({ type: "error", text: String(err) });
@@ -161,154 +161,179 @@ function SettingsPage() {
 
   if (!form) {
     return (
-      <div className="space-y-6">
-        <p className="text-sm text-[#525d73]">Chargement…</p>
+      <div>
+        <header className="sticky top-0 z-10 bg-[#F5F7FA]/80 backdrop-blur-sm px-8 pt-6 pb-4 border-b border-slate-200/30">
+          <h1 className="text-2xl font-bold font-[DM_Sans] text-slate-800 tracking-tight">
+            Parametres
+          </h1>
+          <p className="text-sm text-slate-400 mt-1">
+            Configuration des seuils et statuts
+          </p>
+        </header>
+        <div className="px-8 pb-8 pt-6">
+          <p className="text-sm text-slate-400">Chargement...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 max-w-3xl">
-      <h1 className="text-xl font-semibold text-[#1a1f2e]">Paramètres</h1>
+    <div>
+      <header className="sticky top-0 z-10 bg-[#F5F7FA]/80 backdrop-blur-sm px-8 pt-6 pb-4 border-b border-slate-200/30">
+        <h1 className="text-2xl font-bold font-[DM_Sans] text-slate-800 tracking-tight">
+          Parametres
+        </h1>
+        <p className="text-sm text-slate-400 mt-1">
+          Configuration des seuils et statuts
+        </p>
+      </header>
 
-      {/* Section 1 — Seuils de charge */}
-      <Card title="Seuils de charge">
-        <div className="space-y-4">
-          <NumberField
-            label="Seuil tickets / technicien"
-            value={form.seuilTicketsTechnicien}
-            onChange={(v) => set("seuilTicketsTechnicien", v)}
-            help="Au-delà de ce seuil, le technicien est en surcharge"
-          />
-          <div>
-            <p className="text-sm font-medium text-[#1a1f2e] mb-2">
-              Seuils de couleur de charge
-            </p>
-            <p className="text-xs text-[#525d73] mb-3">
-              Limites pour les couleurs de charge (vert ≤ X, jaune ≤ Y, orange
-              ≤ Z, rouge au-delà)
-            </p>
-            <div className="flex flex-wrap gap-4">
-              <div>
-                <label className="block text-xs font-medium text-[#525d73] mb-1">
-                  Vert (≤)
-                </label>
-                <input
-                  type="number"
-                  min={0}
-                  value={form.seuilCouleurVert}
-                  onChange={(e) =>
-                    set("seuilCouleurVert", Math.max(0, Number(e.target.value)))
-                  }
-                  className="w-24 border border-[#e2e6ee] rounded px-3 py-1.5 text-sm text-[#1a1f2e] focus:outline-none focus:border-[#0C419A]"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-[#525d73] mb-1">
-                  Jaune (≤)
-                </label>
-                <input
-                  type="number"
-                  min={0}
-                  value={form.seuilCouleurJaune}
-                  onChange={(e) =>
-                    set(
-                      "seuilCouleurJaune",
-                      Math.max(0, Number(e.target.value))
-                    )
-                  }
-                  className="w-24 border border-[#e2e6ee] rounded px-3 py-1.5 text-sm text-[#1a1f2e] focus:outline-none focus:border-[#0C419A]"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-[#525d73] mb-1">
-                  Orange (≤)
-                </label>
-                <input
-                  type="number"
-                  min={0}
-                  value={form.seuilCouleurOrange}
-                  onChange={(e) =>
-                    set(
-                      "seuilCouleurOrange",
-                      Math.max(0, Number(e.target.value))
-                    )
-                  }
-                  className="w-24 border border-[#e2e6ee] rounded px-3 py-1.5 text-sm text-[#1a1f2e] focus:outline-none focus:border-[#0C419A]"
-                />
+      <div className="px-8 pb-8 pt-6 space-y-6 max-w-3xl">
+        {/* Section 1 — Seuils de charge */}
+        <div className="animate-fade-slide-up">
+        <SettingsCard title="Seuils de charge">
+          <div className="space-y-4">
+            <NumberField
+              label="Seuil tickets / technicien"
+              value={form.seuilTicketsTechnicien}
+              onChange={(v) => set("seuilTicketsTechnicien", v)}
+              help="Au-dela de ce seuil, le technicien est en surcharge"
+            />
+            <div>
+              <p className="text-sm font-medium text-slate-800 mb-2">
+                Seuils de couleur de charge
+              </p>
+              <p className="text-xs text-slate-400 mb-3">
+                Limites pour les couleurs de charge (vert &lt;= X, jaune &lt;= Y, orange
+                &lt;= Z, rouge au-dela)
+              </p>
+              <div className="flex flex-wrap gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">
+                    Vert (&lt;=)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={form.seuilCouleurVert}
+                    onChange={(e) =>
+                      set("seuilCouleurVert", Math.max(0, Number(e.target.value)))
+                    }
+                    className="w-24 rounded-lg bg-white px-3 py-1.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">
+                    Jaune (&lt;=)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={form.seuilCouleurJaune}
+                    onChange={(e) =>
+                      set(
+                        "seuilCouleurJaune",
+                        Math.max(0, Number(e.target.value))
+                      )
+                    }
+                    className="w-24 rounded-lg bg-white px-3 py-1.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">
+                    Orange (&lt;=)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={form.seuilCouleurOrange}
+                    onChange={(e) =>
+                      set(
+                        "seuilCouleurOrange",
+                        Math.max(0, Number(e.target.value))
+                      )
+                    }
+                    className="w-24 rounded-lg bg-white px-3 py-1.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+                  />
+                </div>
               </div>
             </div>
           </div>
+        </SettingsCard>
         </div>
-      </Card>
 
-      {/* Section 2 — Seuils de classification */}
-      <Card title="Seuils de classification">
-        <div className="grid grid-cols-2 gap-4">
-          <NumberField
-            label="Ancienneté clôturer (jours)"
-            value={form.seuilAncienneteCloture}
-            onChange={(v) => set("seuilAncienneteCloture", v)}
-          />
-          <NumberField
-            label="Inactivité clôturer (jours)"
-            value={form.seuilInactiviteCloture}
-            onChange={(v) => set("seuilInactiviteCloture", v)}
-          />
-          <NumberField
-            label="Ancienneté relancer (jours)"
-            value={form.seuilAncienneteRelancer}
-            onChange={(v) => set("seuilAncienneteRelancer", v)}
-          />
-          <NumberField
-            label="Inactivité relancer (jours)"
-            value={form.seuilInactiviteRelancer}
-            onChange={(v) => set("seuilInactiviteRelancer", v)}
-          />
+        {/* Section 2 — Seuils de classification */}
+        <div className="animate-fade-slide-up animation-delay-150">
+        <SettingsCard title="Seuils de classification">
+          <div className="grid grid-cols-2 gap-4">
+            <NumberField
+              label="Anciennete cloturer (jours)"
+              value={form.seuilAncienneteCloture}
+              onChange={(v) => set("seuilAncienneteCloture", v)}
+            />
+            <NumberField
+              label="Inactivite cloturer (jours)"
+              value={form.seuilInactiviteCloture}
+              onChange={(v) => set("seuilInactiviteCloture", v)}
+            />
+            <NumberField
+              label="Anciennete relancer (jours)"
+              value={form.seuilAncienneteRelancer}
+              onChange={(v) => set("seuilAncienneteRelancer", v)}
+            />
+            <NumberField
+              label="Inactivite relancer (jours)"
+              value={form.seuilInactiviteRelancer}
+              onChange={(v) => set("seuilInactiviteRelancer", v)}
+            />
+          </div>
+        </SettingsCard>
         </div>
-      </Card>
 
-      {/* Section 3 — Statuts */}
-      <Card title="Statuts">
-        <div className="space-y-6">
-          <TagList
-            label="Statuts vivants"
-            tags={form.statutsVivants}
-            onChange={(tags) => set("statutsVivants", tags)}
-          />
-          <TagList
-            label="Statuts terminés"
-            tags={form.statutsTermines}
-            onChange={(tags) => set("statutsTermines", tags)}
-          />
+        {/* Section 3 — Statuts */}
+        <div className="animate-fade-slide-up animation-delay-300">
+        <SettingsCard title="Statuts">
+          <div className="space-y-6">
+            <TagList
+              label="Statuts vivants"
+              tags={form.statutsVivants}
+              onChange={(tags) => set("statutsVivants", tags)}
+            />
+            <TagList
+              label="Statuts termines"
+              tags={form.statutsTermines}
+              onChange={(tags) => set("statutsTermines", tags)}
+            />
+          </div>
+        </SettingsCard>
         </div>
-      </Card>
 
-      {/* Footer */}
-      <div className="flex items-center gap-4">
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={saving}
-          className="px-5 py-2 rounded bg-[#0C419A] hover:bg-[#0a3783] text-white text-sm font-medium disabled:opacity-50"
-        >
-          {saving ? "Enregistrement…" : "Enregistrer"}
-        </button>
-        <button
-          type="button"
-          onClick={handleReset}
-          disabled={saving}
-          className="px-5 py-2 rounded border border-[#e2e6ee] text-[#1a1f2e] text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
-        >
-          Réinitialiser
-        </button>
-        {message && (
-          <p
-            className={`text-sm ${message.type === "success" ? "text-green-600" : "text-red-600"}`}
+        {/* Footer */}
+        <div className="animate-fade-slide-up animation-delay-450 flex items-center gap-4">
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving}
+            className="px-5 py-2 rounded-xl bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium disabled:opacity-50 shadow-[0_3px_6px_rgba(0,0,0,0.10),0_2px_4px_rgba(0,0,0,0.06)]"
           >
-            {message.text}
-          </p>
-        )}
+            {saving ? "Enregistrement..." : "Enregistrer"}
+          </button>
+          <button
+            type="button"
+            onClick={handleReset}
+            disabled={saving}
+            className="px-5 py-2 rounded-xl bg-white text-slate-800 text-sm font-medium hover:bg-slate-50 disabled:opacity-50 shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)]"
+          >
+            Reinitialiser
+          </button>
+          {message && (
+            <p
+              className={`text-sm ${message.type === "success" ? "text-success-500" : "text-danger-500"}`}
+            >
+              {message.text}
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );

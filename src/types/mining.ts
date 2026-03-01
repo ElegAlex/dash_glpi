@@ -3,6 +3,7 @@ export interface TextAnalysisRequest {
   scope: string;
   groupBy?: string;
   topN?: number;
+  includeResolved?: boolean;
 }
 
 export interface KeywordFrequency {
@@ -29,6 +30,7 @@ export interface TextAnalysisResult {
   keywords: KeywordFrequency[];
   byGroup: GroupKeywords[] | null;
   corpusStats: CorpusStats;
+  ticketMap: Record<string, TicketRef[]>;
 }
 
 // ── Clusters (US025) ──
@@ -66,4 +68,34 @@ export interface DuplicatePair {
   ticketBTitre: string;
   similarity: number;
   groupe: string;
+}
+
+// ── Co-occurrence Network ──
+export interface CooccurrenceRequest {
+  topNNodes?: number;
+  maxEdges?: number;
+  includeResolved?: boolean;
+}
+
+export interface CooccurrenceNode {
+  id: string;
+  tfidfScore: number;
+  docFrequency: number;
+}
+
+export interface CooccurrenceEdge {
+  source: string;
+  target: string;
+  weight: number;
+}
+
+export interface TicketRef {
+  id: number;
+  titre: string;
+}
+
+export interface CooccurrenceResult {
+  nodes: CooccurrenceNode[];
+  edges: CooccurrenceEdge[];
+  ticketMap: Record<string, TicketRef[]>;
 }
