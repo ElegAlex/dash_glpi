@@ -9,11 +9,12 @@ interface KpiCardProps {
   trendIsGood?: boolean;
   icon?: ReactNode;
   accentColor?: string;
+  onClick?: () => void;
 }
 
 export function KpiCard({
   label, value, previousValue, format = 'number',
-  trend, trendIsGood = true, icon, accentColor = '#0C419A',
+  trend, trendIsGood = true, icon, accentColor = '#0C419A', onClick,
 }: KpiCardProps) {
   const displayValue = format === 'percent'
     ? `${value}%`
@@ -32,14 +33,17 @@ export function KpiCard({
     : !trendIsGood;
 
   return (
-    <div className="
+    <div
+      onClick={onClick}
+      className={`
       relative overflow-hidden bg-white rounded-2xl p-5
       shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)]
       hover:shadow-[0_3px_6px_rgba(0,0,0,0.10),0_2px_4px_rgba(0,0,0,0.06)]
       hover:-translate-y-0.5
       transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)]
       group
-    ">
+      ${onClick ? 'cursor-pointer' : ''}
+    `}>
       {/* Barre d'accent top */}
       <div
         className="absolute top-0 inset-x-0 h-[3px] rounded-t-2xl"

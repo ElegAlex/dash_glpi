@@ -8,6 +8,7 @@ export interface StockOverview {
   parAnciennete: AgeRangeCount[];
   inactifs14j: number;
   inactifs30j: number;
+  nonAssignes: number;
 }
 
 export interface StatutCount {
@@ -89,4 +90,20 @@ export interface CategoryTree {
   source: string;
   nodes: CategoryNode[];
   totalTickets: number;
+}
+
+export interface TicketSummary {
+  id: number;
+  titre: string;
+  statut: string;
+  typeTicket: string;
+  technicienPrincipal: string | null;
+  groupePrincipal: string | null;
+  dateOuverture: string;
+  derniereModification: string | null;
+  ancienneteJours: number | null;
+  inactiviteJours: number | null;
+  nombreSuivis: number | null;
+  actionRecommandee: string | null;
+  motifClassification: string | null;
 }

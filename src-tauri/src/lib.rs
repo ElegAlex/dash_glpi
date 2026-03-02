@@ -130,6 +130,7 @@ pub fn run() {
             commands::stock::get_stock_by_group,
             commands::stock::get_ticket_detail,
             commands::stock::get_technician_tickets,
+            commands::stock::get_unassigned_tickets,
             // Bilan
             commands::bilan::get_bilan_temporel,
             // Catégories

@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { X } from 'lucide-react';
 import { useInvoke } from '../hooks/useInvoke';
 import { useECharts } from '../hooks/useECharts';
 import { useFilterStore } from '../stores/filterStore';
 import { KpiCards } from '../components/stock/KpiCards';
 import { TechnicianTable } from '../components/stock/TechnicianTable';
 import { Card } from '../components/shared/Card';
-import type { StockOverview, TechnicianStats, CategoryTree, CategoryNode } from '../types/kpi';
+import type { StockOverview, TechnicianStats, CategoryTree, CategoryNode, TicketSummary } from '../types/kpi';
 import '../lib/echarts-theme';
 
 const PALETTE = ['#1565C0', '#2E7D32', '#FF8F00', '#6A1B9A', '#00838F', '#C62828', '#4E342E', '#37474F'];
@@ -112,8 +114,102 @@ function CategoryBarChart({ tree }: { tree: CategoryTree }) {
   );
 }
 
+/* ── Drawer tickets non assignés ── */
+function UnassignedDrawer({ onClose }: { onClose: () => void }) {
+  const [tickets, setTickets] = useState<TicketSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    invoke<TicketSummary[]>('get_unassigned_tickets')
+      .then(setTickets)
+      .finally(() => setLoading(false));
+  }, []);
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end">
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/20 backdrop-blur-[2px]" onClick={onClose} />
+
+      {/* Panel */}
+      <div className="relative w-[700px] max-w-[90vw] bg-white shadow-[0_20px_40px_rgba(0,0,0,0.14),0_8px_20px_rgba(0,0,0,0.10)] flex flex-col animate-slide-in-right">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+          <div>
+            <h2 className="text-lg font-bold font-[DM_Sans] text-slate-800">
+              Tickets non assignes
+            </h2>
+            {!loading && (
+              <p className="text-sm text-slate-400 mt-0.5">
+                {tickets.length.toLocaleString('fr-FR')} ticket(s)
+              </p>
+            )}
+          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-slate-100 transition-colors"
+          >
+            <X size={18} className="text-slate-400" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto">
+          {loading ? (
+            <div className="flex items-center justify-center py-24 text-sm text-slate-400">
+              Chargement...
+            </div>
+          ) : tickets.length === 0 ? (
+            <div className="flex items-center justify-center py-24 text-sm text-slate-400">
+              Aucun ticket non assigne
+            </div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-slate-50/95 backdrop-blur-sm">
+                <tr>
+                  <th className="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-400">ID</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-400">Titre</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-400">Statut</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-400">Type</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-400">Groupe</th>
+                  <th className="text-right px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-400">Age (j)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tickets.map((t) => {
+                  const age = t.ancienneteJours;
+                  const ageCls = age != null && age > 90
+                    ? 'text-red-600 font-medium'
+                    : age != null && age > 30
+                      ? 'text-amber-600'
+                      : 'text-slate-800';
+                  return (
+                    <tr
+                      key={t.id}
+                      className="border-b border-slate-50 last:border-0 hover:bg-[rgba(12,65,154,0.04)] transition-colors duration-100"
+                    >
+                      <td className="px-4 py-2.5 font-[DM_Sans] font-semibold tabular-nums text-slate-600">{t.id}</td>
+                      <td className="px-4 py-2.5 text-slate-800 max-w-[260px] truncate">{t.titre}</td>
+                      <td className="px-4 py-2.5 text-slate-600">{t.statut}</td>
+                      <td className="px-4 py-2.5 text-slate-600">{t.typeTicket}</td>
+                      <td className="px-4 py-2.5 text-slate-600 max-w-[140px] truncate">{t.groupePrincipal ?? '—'}</td>
+                      <td className={`px-4 py-2.5 text-right font-[DM_Sans] font-semibold tabular-nums ${ageCls}`}>
+                        {age ?? '—'}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function StockPage() {
   const { statut, typeTicket, groupe, resetFilters, setStatut, setTypeTicket, setGroupe } = useFilterStore();
+  const [showUnassigned, setShowUnassigned] = useState(false);
 
   const overviewHook = useInvoke<StockOverview>();
   const techHook = useInvoke<TechnicianStats[]>();
@@ -183,7 +279,12 @@ function StockPage() {
         )}
 
         <div className="animate-fade-slide-up">
-          {overviewHook.data && <KpiCards overview={overviewHook.data} />}
+          {overviewHook.data && (
+            <KpiCards
+              overview={overviewHook.data}
+              onUnassignedClick={() => setShowUnassigned(true)}
+            />
+          )}
         </div>
 
         {/* Filter bar */}
@@ -259,6 +360,9 @@ function StockPage() {
           )}
         </div>
       </div>
+
+      {/* Drawer tickets non assignés */}
+      {showUnassigned && <UnassignedDrawer onClose={() => setShowUnassigned(false)} />}
     </div>
   );
 }

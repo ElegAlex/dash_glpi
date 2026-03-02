@@ -231,6 +231,15 @@ pub fn get_stock_overview(conn: &Connection) -> Result<StockOverview, rusqlite::
         },
     )?;
 
+    // 6. Tickets vivants non assignés
+    let non_assignes: usize = conn.query_row(
+        "SELECT COUNT(*) FROM tickets
+         WHERE import_id = ?1 AND est_vivant = 1
+           AND (technicien_principal IS NULL OR technicien_principal = '')",
+        rusqlite::params![import_id],
+        |row| row.get::<_, i64>(0),
+    )? as usize;
+
     Ok(StockOverview {
         total_vivants,
         total_termines,
@@ -241,6 +250,7 @@ pub fn get_stock_overview(conn: &Connection) -> Result<StockOverview, rusqlite::
         par_anciennete,
         inactifs_14j,
         inactifs_30j,
+        non_assignes,
     })
 }
 
@@ -449,6 +459,42 @@ pub fn get_technician_tickets(
     let mut stmt = conn.prepare(&sql)?;
     let rows = stmt
         .query_map(params_from_iter(params), |row| {
+            Ok(TicketSummary {
+                id: row.get::<_, u64>(0)?,
+                titre: row.get(1)?,
+                statut: row.get(2)?,
+                type_ticket: row.get(3)?,
+                technicien_principal: row.get(4)?,
+                groupe_principal: row.get(5)?,
+                date_ouverture: row.get(6)?,
+                derniere_modification: row.get(7)?,
+                anciennete_jours: row.get(8)?,
+                inactivite_jours: row.get(9)?,
+                nombre_suivis: row.get::<_, Option<i64>>(10)?.map(|v| v as u32),
+                action_recommandee: row.get(11)?,
+                motif_classification: row.get(12)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(rows)
+}
+
+/// Tickets vivants non assignés (technicien_principal absent).
+pub fn get_unassigned_tickets(conn: &Connection) -> Result<Vec<TicketSummary>, rusqlite::Error> {
+    let import_id = get_active_import_id(conn)?;
+
+    let mut stmt = conn.prepare_cached(
+        "SELECT id, titre, statut, type_ticket, technicien_principal, groupe_principal,
+                date_ouverture, derniere_modification, anciennete_jours, inactivite_jours,
+                nombre_suivis, action_recommandee, motif_classification
+         FROM tickets
+         WHERE import_id = ?1 AND est_vivant = 1
+           AND (technicien_principal IS NULL OR technicien_principal = '')
+         ORDER BY COALESCE(anciennete_jours, 0) DESC",
+    )?;
+    let rows = stmt
+        .query_map(rusqlite::params![import_id], |row| {
             Ok(TicketSummary {
                 id: row.get::<_, u64>(0)?,
                 titre: row.get(1)?,

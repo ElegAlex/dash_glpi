@@ -17,6 +17,7 @@ pub struct StockOverview {
     pub par_anciennete: Vec<AgeRangeCount>,
     pub inactifs_14j: usize,
     pub inactifs_30j: usize,
+    pub non_assignes: usize,
 }
 
 #[derive(Serialize)]
@@ -154,6 +155,13 @@ pub async fn get_stock_by_group(
     filters: Option<StockFilters>,
 ) -> Result<Vec<GroupStock>, String> {
     state.db(|conn| queries::get_groups_stock(conn, filters.as_ref()))
+}
+
+#[tauri::command]
+pub async fn get_unassigned_tickets(
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<TicketSummary>, String> {
+    state.db(|conn| queries::get_unassigned_tickets(conn))
 }
 
 #[tauri::command]

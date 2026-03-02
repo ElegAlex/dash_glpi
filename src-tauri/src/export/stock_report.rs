@@ -261,6 +261,7 @@ mod tests {
             ],
             inactifs_14j: 15,
             inactifs_30j: 8,
+            non_assignes: 12,
         }
     }
 
