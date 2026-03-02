@@ -13,12 +13,77 @@ use state::AppState;
 use std::sync::Mutex;
 use tauri::Manager;
 
+// ─── Crash reporting ─────────────────────────────────────────────────────────
+
+/// Write crash info to a log file next to the executable
+fn write_crash_log(msg: &str) {
+    use std::io::Write;
+    if let Some(path) = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.join("glpi-dashboard-crash.log")))
+    {
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+        {
+            let _ = writeln!(f, "{}", msg);
+        }
+    }
+}
+
+/// Show a native error dialog (Windows: MessageBox, other: stderr only)
+fn show_fatal_error(msg: &str) {
+    eprintln!("{}", msg);
+    #[cfg(target_os = "windows")]
+    win_dialog::show_message_box(msg);
+}
+
+#[cfg(target_os = "windows")]
+mod win_dialog {
+    use std::ffi::OsStr;
+    use std::iter::once;
+    use std::os::windows::ffi::OsStrExt;
+
+    #[link(name = "user32")]
+    extern "system" {
+        fn MessageBoxW(
+            hwnd: *mut core::ffi::c_void,
+            text: *const u16,
+            caption: *const u16,
+            utype: u32,
+        ) -> i32;
+    }
+
+    pub fn show_message_box(msg: &str) {
+        let text: Vec<u16> = OsStr::new(msg).encode_wide().chain(once(0)).collect();
+        let caption: Vec<u16> = OsStr::new("GLPI Dashboard \u{2014} Erreur")
+            .encode_wide()
+            .chain(once(0))
+            .collect();
+        unsafe {
+            MessageBoxW(core::ptr::null_mut(), text.as_ptr(), caption.as_ptr(), 0x10);
+        }
+    }
+}
+
+// ─── Application entry point ─────────────────────────────────────────────────
+
 pub fn run() {
+    // Install panic hook: log to file + show dialog on Windows
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let msg = format!("GLPI Dashboard — Panic:\n{info}");
+        write_crash_log(&msg);
+        show_fatal_error(&msg);
+        default_hook(info);
+    }));
+
     let app_state = AppState {
         db: Mutex::new(None),
     };
 
-    tauri::Builder::default()
+    let result = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_notification::init())
@@ -29,17 +94,23 @@ pub fn run() {
             let db_path = app_handle
                 .path()
                 .app_data_dir()
-                .expect("Impossible de résoudre app_data_dir")
+                .map_err(|e| format!("Impossible de résoudre app_data_dir: {e}"))?
                 .join("glpi_dashboard.db");
 
             if let Some(parent) = db_path.parent() {
-                std::fs::create_dir_all(parent)?;
+                std::fs::create_dir_all(parent)
+                    .map_err(|e| format!("Impossible de créer {:?}: {e}", parent))?;
             }
 
-            let conn = db::setup::init_db(db_path.to_str().unwrap())?;
+            let db_path_str = db_path
+                .to_str()
+                .ok_or_else(|| format!("Chemin DB invalide (non-UTF8): {:?}", db_path))?;
+
+            let conn = db::setup::init_db(db_path_str)
+                .map_err(|e| format!("Erreur init DB ({}): {e}", db_path_str))?;
 
             let state: tauri::State<AppState> = app.state();
-            *state.db.lock().unwrap() = Some(conn);
+            *state.db.lock().map_err(|e| format!("Mutex poisonné: {e}"))? = Some(conn);
 
             Ok(())
         })
@@ -82,8 +153,13 @@ pub fn run() {
             // Dashboard KPI
             commands::dashboard::get_dashboard_kpi,
         ])
-        .run(tauri::generate_context!())
-        .expect("Erreur au lancement de l'application");
+        .run(tauri::generate_context!());
+
+    if let Err(e) = result {
+        let msg = format!("Erreur fatale au lancement de GLPI Dashboard:\n\n{e}");
+        write_crash_log(&msg);
+        show_fatal_error(&msg);
+    }
 }
 
 // ─── E2E Integration Tests ──────────────────────────────────────────────────

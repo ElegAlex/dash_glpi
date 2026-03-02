@@ -69,6 +69,7 @@ mod tests {
             seuil_couleur_vert: 10,
             seuil_couleur_jaune: 20,
             seuil_couleur_orange: 40,
+            seuil_similarite_doublons: 0.92,
             statuts_vivants: vec![],
             statuts_termines: vec![],
         }
