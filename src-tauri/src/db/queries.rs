@@ -777,22 +777,33 @@ pub fn get_technician_history(
     })
 }
 
+/// Clause WHERE pour le scope vivants/tous.
+fn scope_clause(scope: &str) -> &'static str {
+    match scope {
+        "vivants" => " AND est_vivant = 1",
+        _ => "", // "all" / "tous" → pas de filtre
+    }
+}
+
 /// Données brutes pour construire l'arbre par groupes de techniciens.
-/// Retourne (groupe_principal, total_vivants, incidents, demandes).
+/// Retourne (groupe_principal, total, incidents, demandes).
 pub fn get_group_tree_data(
     conn: &Connection,
+    scope: &str,
 ) -> Result<Vec<(String, i64, i64, i64)>, rusqlite::Error> {
     let import_id = get_active_import_id(conn)?;
-    let mut stmt = conn.prepare_cached(
+    let sc = scope_clause(scope);
+    let sql = format!(
         "SELECT groupe_principal,
                 COUNT(*) AS total,
                 SUM(CASE WHEN type_ticket = 'Incident' THEN 1 ELSE 0 END) AS incidents,
                 SUM(CASE WHEN type_ticket = 'Demande'  THEN 1 ELSE 0 END) AS demandes
          FROM tickets
-         WHERE import_id = ?1 AND est_vivant = 1 AND groupe_principal IS NOT NULL
+         WHERE import_id = ?1{sc} AND groupe_principal IS NOT NULL
          GROUP BY groupe_principal
-         ORDER BY total DESC",
-    )?;
+         ORDER BY total DESC"
+    );
+    let mut stmt = conn.prepare(&sql)?;
     let rows = stmt
         .query_map(rusqlite::params![import_id], |row| {
             Ok((
@@ -807,22 +818,25 @@ pub fn get_group_tree_data(
 }
 
 /// Données brutes pour construire l'arbre par catégories ITIL.
-/// Retourne (categorie, total_vivants, incidents, demandes).
+/// Retourne (categorie, total, incidents, demandes).
 pub fn get_categorie_tree_data(
     conn: &Connection,
+    scope: &str,
 ) -> Result<Vec<(String, i64, i64, i64)>, rusqlite::Error> {
     let import_id = get_active_import_id(conn)?;
-    let mut stmt = conn.prepare_cached(
+    let sc = scope_clause(scope);
+    let sql = format!(
         "SELECT categorie,
                 COUNT(*) AS total,
                 SUM(CASE WHEN type_ticket = 'Incident' THEN 1 ELSE 0 END) AS incidents,
                 SUM(CASE WHEN type_ticket = 'Demande'  THEN 1 ELSE 0 END) AS demandes
          FROM tickets
-         WHERE import_id = ?1 AND est_vivant = 1
+         WHERE import_id = ?1{sc}
            AND categorie IS NOT NULL AND categorie != ''
          GROUP BY categorie
-         ORDER BY total DESC",
-    )?;
+         ORDER BY total DESC"
+    );
+    let mut stmt = conn.prepare(&sql)?;
     let rows = stmt
         .query_map(rusqlite::params![import_id], |row| {
             Ok((
@@ -1369,7 +1383,7 @@ mod tests {
     #[test]
     fn test_category_tree_data() {
         let (conn, _) = setup();
-        let data = get_group_tree_data(&conn).unwrap();
+        let data = get_group_tree_data(&conn, "vivants").unwrap();
         assert_eq!(data.len(), 2);
         // _DSI > _SUPPORT : 2 tickets vivants (Incident + Demande)
         assert_eq!(data[0].1, 2);

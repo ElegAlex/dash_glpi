@@ -295,7 +295,7 @@ mod e2e_tests {
 
         // 6. Verify get_group_tree_data
         let groups_tree =
-            crate::db::queries::get_group_tree_data(&conn).expect("get_group_tree_data failed");
+            crate::db::queries::get_group_tree_data(&conn, "vivants").expect("get_group_tree_data failed");
         assert!(
             !groups_tree.is_empty(),
             "Should have group data"

@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { FolderTree, Layers, BarChart3 } from 'lucide-react';
 import { useInvoke } from '../hooks/useInvoke';
 import { useECharts } from '../hooks/useECharts';
@@ -75,12 +75,15 @@ function TreemapChart({ tree }: { tree: CategoryTree }) {
   return <div ref={chartRef} className="h-[480px] w-full" />;
 }
 
+type Scope = 'vivants' | 'all';
+
 function CategoriesPage() {
+  const [scope, setScope] = useState<Scope>('vivants');
   const { data, loading, error, execute } = useInvoke<CategoryTree>();
 
   useEffect(() => {
-    execute('get_categories_tree', { request: { scope: 'all' } });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    execute('get_categories_tree', { request: { scope } });
+  }, [scope]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const topCategory = useMemo(() => {
     if (!data) return null;
@@ -106,11 +109,28 @@ function CategoriesPage() {
                 : 'Arborescence des groupes de techniciens'}
             </p>
           </div>
-          {data && (
-            <span className="inline-flex items-center rounded-xl bg-primary-50 px-3 py-1 text-xs font-medium text-primary-500">
-              Source : {isCategorie ? 'Categories ITIL' : 'Groupes de techniciens'}
-            </span>
-          )}
+          <div className="flex items-center gap-3">
+            <div className="flex rounded-lg overflow-hidden bg-slate-100">
+              {([['vivants', 'En cours'], ['all', 'Tous les tickets']] as const).map(([val, label]) => (
+                <button
+                  key={val}
+                  onClick={() => setScope(val)}
+                  className={`px-3 py-1.5 text-xs font-medium font-[DM_Sans] transition-colors ${
+                    scope === val
+                      ? 'bg-[#0C419A] text-white'
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {data && (
+              <span className="inline-flex items-center rounded-xl bg-primary-50 px-3 py-1 text-xs font-medium text-primary-500">
+                Source : {isCategorie ? 'Categories ITIL' : 'Groupes de techniciens'}
+              </span>
+            )}
+          </div>
         </div>
       </header>
 

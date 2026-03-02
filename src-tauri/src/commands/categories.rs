@@ -125,10 +125,11 @@ pub async fn get_categories_tree(
             }
         };
 
+        let scope = request.scope.as_str();
         let (raw, source) = if use_categorie {
-            (queries::get_categorie_tree_data(conn)?, "categorie".to_string())
+            (queries::get_categorie_tree_data(conn, scope)?, "categorie".to_string())
         } else {
-            (queries::get_group_tree_data(conn)?, "groupe".to_string())
+            (queries::get_group_tree_data(conn, scope)?, "groupe".to_string())
         };
 
         let total: usize = raw.iter().map(|(_, c, _, _)| *c as usize).sum();
