@@ -22,7 +22,16 @@ pub fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
     for migration in MIGRATIONS {
         if migration.version > current_version {
             let tx = conn.unchecked_transaction()?;
-            tx.execute_batch(migration.sql)?;
+            match tx.execute_batch(migration.sql) {
+                Ok(_) => {}
+                Err(e) if e.to_string().contains("duplicate column name") => {
+                    log::warn!(
+                        "Migration {}: colonne déjà existante, ignorée",
+                        migration.version
+                    );
+                }
+                Err(e) => return Err(e),
+            }
             tx.pragma_update(None, "user_version", migration.version)?;
             tx.commit()?;
             log::info!("Migration {} appliquée", migration.version);
