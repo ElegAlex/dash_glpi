@@ -1,7 +1,7 @@
 use chrono::{Datelike, Duration, NaiveDate, NaiveDateTime};
 
 /// Determines granularity automatically based on number of days in range.
-/// < 30 days → "week", < 365 days → "month", else → "quarter"
+/// ≤14 → "day", <30 → "week", <365 → "month", <730 → "quarter", else → "year"
 pub fn auto_granularity(days: i64) -> String {
     if days <= 14 {
         "day".to_string()
@@ -9,8 +9,10 @@ pub fn auto_granularity(days: i64) -> String {
         "week".to_string()
     } else if days < 365 {
         "month".to_string()
-    } else {
+    } else if days < 730 {
         "quarter".to_string()
+    } else {
+        "year".to_string()
     }
 }
 
@@ -26,6 +28,7 @@ pub fn generate_period_keys(
         "day" => generate_day_keys(date_from, date_to),
         "week" => generate_week_keys(date_from, date_to),
         "quarter" => generate_quarter_keys(date_from, date_to),
+        "year" => generate_year_keys(date_from, date_to),
         _ => generate_month_keys(date_from, date_to),
     }
 }
@@ -171,6 +174,34 @@ fn generate_quarter_keys(
     result
 }
 
+fn generate_year_keys(
+    date_from: NaiveDateTime,
+    date_to: NaiveDateTime,
+) -> Vec<(String, String, NaiveDateTime, NaiveDateTime)> {
+    let mut result = Vec::new();
+    let mut year = date_from.year();
+    let end_year = date_to.year();
+
+    while year <= end_year {
+        let period_key = format!("{:04}", year);
+        let period_label = format!("{}", year);
+
+        let start = NaiveDate::from_ymd_opt(year, 1, 1)
+            .unwrap()
+            .and_hms_opt(0, 0, 0)
+            .unwrap();
+        let end = NaiveDate::from_ymd_opt(year, 12, 31)
+            .unwrap()
+            .and_hms_opt(23, 59, 59)
+            .unwrap();
+
+        result.push((period_key, period_label, start, end));
+        year += 1;
+    }
+
+    result
+}
+
 fn french_month_name(month: u32) -> &'static str {
     match month {
         1 => "Janvier",
@@ -220,7 +251,26 @@ mod tests {
     #[test]
     fn test_auto_granularity_quarter() {
         assert_eq!(auto_granularity(365), "quarter");
-        assert_eq!(auto_granularity(1000), "quarter");
+        assert_eq!(auto_granularity(729), "quarter");
+    }
+
+    #[test]
+    fn test_auto_granularity_year() {
+        assert_eq!(auto_granularity(730), "year");
+        assert_eq!(auto_granularity(1500), "year");
+    }
+
+    #[test]
+    fn test_generate_year_keys_multi_year() {
+        let from = dt("2023-01-01 00:00:00");
+        let to = dt("2026-03-02 23:59:59");
+        let keys = generate_period_keys(from, to, "year");
+        assert_eq!(keys.len(), 4);
+        assert_eq!(keys[0].0, "2023");
+        assert_eq!(keys[0].1, "2023");
+        assert_eq!(keys[3].0, "2026");
+        assert_eq!(keys[0].2, dt("2023-01-01 00:00:00"));
+        assert_eq!(keys[0].3, dt("2023-12-31 23:59:59"));
     }
 
     #[test]

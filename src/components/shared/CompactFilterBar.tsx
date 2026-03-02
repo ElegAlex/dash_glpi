@@ -17,9 +17,10 @@ const GRANULARITY_LABELS: Record<Granularity, string> = {
   week: 'Sem.',
   month: 'Mois',
   quarter: 'Trim.',
+  year: 'Annee',
 };
 
-const GRANULARITIES: Granularity[] = ['day', 'week', 'month', 'quarter'];
+const GRANULARITIES: Granularity[] = ['day', 'week', 'month', 'quarter', 'year'];
 
 export function CompactFilterBar({
   range,

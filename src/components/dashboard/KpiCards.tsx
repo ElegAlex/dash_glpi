@@ -4,7 +4,7 @@ import type { DashboardKpi } from '../../types/dashboard';
 
 interface KpiCardsProps {
   kpi: DashboardKpi;
-  granularity?: 'day' | 'week' | 'month' | 'quarter';
+  granularity?: 'day' | 'week' | 'month' | 'quarter' | 'year';
 }
 
 const granularityLabel: Record<string, string> = {
@@ -12,6 +12,7 @@ const granularityLabel: Record<string, string> = {
   week: 'semaine',
   month: 'mois',
   quarter: 'trimestre',
+  year: 'annee',
 };
 
 export function KpiCards({ kpi, granularity = 'month' }: KpiCardsProps) {

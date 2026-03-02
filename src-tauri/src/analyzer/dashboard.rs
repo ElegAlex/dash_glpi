@@ -195,6 +195,7 @@ fn period_expr(granularity: &str, date_col: &str) -> String {
         "quarter" => format!(
             "(strftime('%Y', {date_col}) || '-Q' || ((CAST(strftime('%m', {date_col}) AS INTEGER) - 1) / 3 + 1))"
         ),
+        "year" => format!("strftime('%Y', {date_col})"),
         _ => format!("strftime('%Y-%m', {date_col})"), // month
     }
 }
@@ -1162,7 +1163,7 @@ pub fn build_dashboard_kpi(
 ) -> Result<DashboardKpi, rusqlite::Error> {
     let start = Instant::now();
     let gran = match granularity {
-        "day" | "week" | "month" | "quarter" => granularity,
+        "day" | "week" | "month" | "quarter" | "year" => granularity,
         _ => "month",
     };
 

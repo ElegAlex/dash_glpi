@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { subDays, startOfQuarter, endOfQuarter, subQuarters, differenceInDays, format, parse, isValid } from 'date-fns';
 
-export type Granularity = 'day' | 'week' | 'month' | 'quarter';
+export type Granularity = 'day' | 'week' | 'month' | 'quarter' | 'year';
 
 export interface DateRange {
   from: Date;
@@ -13,7 +13,8 @@ export function detectGranularity(from: Date, to: Date): Granularity {
   if (days <= 14) return 'day';
   if (days < 30) return 'week';
   if (days < 365) return 'month';
-  return 'quarter';
+  if (days < 730) return 'quarter';
+  return 'year';
 }
 
 type Preset = '7d' | '30d' | 'quarter';

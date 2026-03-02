@@ -904,6 +904,7 @@ fn periode_expr(granularity: &str, col: &str) -> String {
              ELSE strftime('%Y', {col}) || '-Q4' \
              END"
         ),
+        "year" => format!("strftime('%Y', {col})"),
         _ => format!("strftime('%Y-%m', {col})"), // default: month
     }
 }

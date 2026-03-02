@@ -18,12 +18,13 @@ import type { ExportResult, TechHistory, TechHistoryPeriod } from '../types/conf
 import { KpiCard } from '../components/shared/KpiCard';
 import { ArrowDownToLine, ArrowUpFromLine, Clock, Package } from 'lucide-react';
 
-type Granularity = 'day' | 'week' | 'month' | 'quarter';
+type Granularity = 'day' | 'week' | 'month' | 'quarter' | 'year';
 const GRAN_OPTIONS: { value: Granularity; label: string }[] = [
   { value: 'day', label: 'Jour' },
   { value: 'week', label: 'Semaine' },
   { value: 'month', label: 'Mois' },
   { value: 'quarter', label: 'Trimestre' },
+  { value: 'year', label: 'Annee' },
 ];
 import type { EChartsCoreOption } from 'echarts/core';
 
