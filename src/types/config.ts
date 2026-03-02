@@ -37,6 +37,29 @@ export interface TechTimelinePoint {
   avgAge: number;
 }
 
+export interface TechHistory {
+  kpi: TechHistoryKpi;
+  periodes: TechHistoryPeriod[];
+}
+
+export interface TechHistoryKpi {
+  totalEntrants: number;
+  totalSortants: number;
+  stockActuel: number;
+  mttrJours: number | null;
+  incidents: number;
+  demandes: number;
+  ageMoyenJours: number;
+}
+
+export interface TechHistoryPeriod {
+  periodKey: string;
+  entrants: number;
+  sortants: number;
+  stockCumule: number;
+  mttrJours: number | null;
+}
+
 export interface TimelinePoint {
   importId: number;
   filename: string;

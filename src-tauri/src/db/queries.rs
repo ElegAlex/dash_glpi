@@ -1,6 +1,9 @@
 use rusqlite::{params_from_iter, types::Value, Connection};
 
-use crate::commands::import::{ImportComparison, ImportRecord, TechTimelinePoint, TechnicianDelta, TimelinePoint};
+use crate::commands::import::{
+    ImportComparison, ImportRecord, TechHistory, TechHistoryKpi, TechHistoryPeriod,
+    TechTimelinePoint, TechnicianDelta, TimelinePoint,
+};
 use crate::commands::search::TicketSearchResult;
 use crate::commands::stock::{
     AgeRangeCount, GroupStock, StatutCount, StockFilters, StockOverview, TicketDetail, TicketSummary,
@@ -636,6 +639,142 @@ pub fn get_technician_timeline(
         })?
         .collect::<Result<Vec<_>, _>>()?;
     Ok(rows)
+}
+
+/// Historique complet d'un technicien : KPI + périodes
+/// (entrants, sortants, stock cumulé, MTTR) avec granularité configurable.
+pub fn get_technician_history(
+    conn: &Connection,
+    technicien: &str,
+    granularity: &str,
+) -> Result<TechHistory, rusqlite::Error> {
+    let import_id = get_active_import_id(conn)?;
+    let pe_ouv = periode_expr(granularity, "date_ouverture");
+    let pe_mod = periode_expr(granularity, "derniere_modification");
+
+    // 1. Entrants par période (tous les tickets assignés, par date d'ouverture)
+    let mut entrants_map = std::collections::BTreeMap::<String, usize>::new();
+    {
+        let sql = format!(
+            "SELECT {pe_ouv} AS p, COUNT(*)
+             FROM tickets
+             WHERE import_id = ?1 AND technicien_principal = ?2
+             GROUP BY p ORDER BY p"
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let rows = stmt.query_map(rusqlite::params![import_id, technicien], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? as usize))
+        })?;
+        for r in rows {
+            let (k, v) = r?;
+            entrants_map.insert(k, v);
+        }
+    }
+
+    // 2. Sortants par période (résolus/clos, par dernière modification)
+    let mut sortants_map = std::collections::BTreeMap::<String, usize>::new();
+    {
+        let sql = format!(
+            "SELECT {pe_mod} AS p, COUNT(*)
+             FROM tickets
+             WHERE import_id = ?1 AND technicien_principal = ?2
+               AND statut IN ('Résolu', 'Clos')
+               AND derniere_modification IS NOT NULL
+             GROUP BY p ORDER BY p"
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let rows = stmt.query_map(rusqlite::params![import_id, technicien], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? as usize))
+        })?;
+        for r in rows {
+            let (k, v) = r?;
+            sortants_map.insert(k, v);
+        }
+    }
+
+    // 3. MTTR par période (durée moyenne de résolution des tickets clos)
+    let mut mttr_map = std::collections::BTreeMap::<String, f64>::new();
+    {
+        let sql = format!(
+            "SELECT {pe_mod} AS p,
+                    AVG(julianday(derniere_modification) - julianday(date_ouverture))
+             FROM tickets
+             WHERE import_id = ?1 AND technicien_principal = ?2
+               AND statut IN ('Résolu', 'Clos')
+               AND derniere_modification IS NOT NULL
+               AND date_ouverture IS NOT NULL
+             GROUP BY p ORDER BY p"
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let rows = stmt.query_map(rusqlite::params![import_id, technicien], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, Option<f64>>(1)?))
+        })?;
+        for r in rows {
+            let (k, v) = r?;
+            if let Some(val) = v {
+                mttr_map.insert(k, val);
+            }
+        }
+    }
+
+    // 4. Union de toutes les clés de période
+    let mut all_keys = std::collections::BTreeSet::<String>::new();
+    all_keys.extend(entrants_map.keys().cloned());
+    all_keys.extend(sortants_map.keys().cloned());
+
+    // 5. Construire les périodes avec stock cumulé
+    let mut periodes = Vec::new();
+    let mut stock: i64 = 0;
+    for key in &all_keys {
+        let entrants = *entrants_map.get(key).unwrap_or(&0);
+        let sortants = *sortants_map.get(key).unwrap_or(&0);
+        stock = (stock + entrants as i64 - sortants as i64).max(0);
+        periodes.push(TechHistoryPeriod {
+            period_key: key.clone(),
+            entrants,
+            sortants,
+            stock_cumule: stock as usize,
+            mttr_jours: mttr_map.get(key).copied(),
+        });
+    }
+
+    // 6. KPI globaux
+    let total_entrants: usize = entrants_map.values().sum();
+    let total_sortants: usize = sortants_map.values().sum();
+
+    let (stock_actuel, incidents, demandes, age_moyen): (i64, i64, i64, f64) = conn.query_row(
+        "SELECT COUNT(*),
+                SUM(CASE WHEN type_ticket = 'Incident' THEN 1 ELSE 0 END),
+                SUM(CASE WHEN type_ticket = 'Demande' THEN 1 ELSE 0 END),
+                COALESCE(AVG(CAST(anciennete_jours AS REAL)), 0.0)
+         FROM tickets
+         WHERE import_id = ?1 AND technicien_principal = ?2 AND est_vivant = 1",
+        rusqlite::params![import_id, technicien],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+    )?;
+
+    let mttr_global: Option<f64> = conn.query_row(
+        "SELECT AVG(julianday(derniere_modification) - julianday(date_ouverture))
+         FROM tickets
+         WHERE import_id = ?1 AND technicien_principal = ?2
+           AND statut IN ('Résolu', 'Clos')
+           AND derniere_modification IS NOT NULL AND date_ouverture IS NOT NULL",
+        rusqlite::params![import_id, technicien],
+        |row| row.get(0),
+    )?;
+
+    Ok(TechHistory {
+        kpi: TechHistoryKpi {
+            total_entrants,
+            total_sortants,
+            stock_actuel: stock_actuel as usize,
+            mttr_jours: mttr_global,
+            incidents: incidents as usize,
+            demandes: demandes as usize,
+            age_moyen_jours: age_moyen,
+        },
+        periodes,
+    })
 }
 
 /// Données brutes pour construire l'arbre catégories/groupes.

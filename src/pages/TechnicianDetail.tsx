@@ -14,7 +14,17 @@ import { invoke } from '@tauri-apps/api/core';
 import { useInvoke } from '../hooks/useInvoke';
 import { useECharts } from '../hooks/useECharts';
 import type { GLPITicket } from '../types/tickets';
-import type { ExportResult, TechTimelinePoint } from '../types/config';
+import type { ExportResult, TechHistory, TechHistoryPeriod } from '../types/config';
+import { KpiCard } from '../components/shared/KpiCard';
+import { ArrowDownToLine, ArrowUpFromLine, Clock, Package } from 'lucide-react';
+
+type Granularity = 'day' | 'week' | 'month' | 'quarter';
+const GRAN_OPTIONS: { value: Granularity; label: string }[] = [
+  { value: 'day', label: 'Jour' },
+  { value: 'week', label: 'Semaine' },
+  { value: 'month', label: 'Mois' },
+  { value: 'quarter', label: 'Trimestre' },
+];
 import type { EChartsCoreOption } from 'echarts/core';
 
 const columnHelper = createColumnHelper<GLPITicket>();
@@ -54,52 +64,129 @@ const COLUMNS = [
   }),
 ];
 
-function HistoriqueTab({ technicien }: { technicien: string }) {
-  const { data, loading, error, execute } = useInvoke<TechTimelinePoint[]>();
-
-  useEffect(() => {
-    execute('get_technician_timeline', { technicien });
-  }, [technicien]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const timeline = useMemo(() => data ?? [], [data]);
-
-  const chartOption = useMemo<EChartsCoreOption>(() => {
-    if (timeline.length < 2) return {};
-    const dates = timeline.map((p) => new Date(p.importDate).toLocaleDateString('fr-FR'));
+/* ── Charts sub-component (mounts AFTER data is loaded → useECharts inits correctly) ── */
+function HistoriqueCharts({ periodes }: { periodes: TechHistoryPeriod[] }) {
+  const volumeOption = useMemo<EChartsCoreOption>(() => {
+    const keys = periodes.map((p) => p.periodKey);
     return {
       tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
-      legend: { data: ['Tickets', 'Age moyen (j)'], bottom: 0 },
-      grid: { left: 60, right: 60, top: 20, bottom: 50 },
-      xAxis: { type: 'category', data: dates },
+      legend: { data: ['Entrants', 'Sortants', 'Stock cumule'], bottom: 0 },
+      grid: { left: 55, right: 55, top: 30, bottom: 50 },
+      xAxis: { type: 'category', data: keys, axisLabel: { fontSize: 11 } },
       yAxis: [
-        { type: 'value', name: 'Tickets', position: 'left' },
-        { type: 'value', name: 'Age (j)', position: 'right' },
+        { type: 'value', name: 'Volume', position: 'left' },
+        { type: 'value', name: 'Stock', position: 'right' },
       ],
       series: [
         {
-          name: 'Tickets',
+          name: 'Entrants',
           type: 'bar',
           yAxisIndex: 0,
-          data: timeline.map((p) => p.ticketCount),
-          itemStyle: { color: '#0C419A' },
+          data: periodes.map((p) => p.entrants),
+          itemStyle: { color: '#1565C0', borderRadius: [6, 6, 0, 0] },
         },
         {
-          name: 'Age moyen (j)',
+          name: 'Sortants',
+          type: 'bar',
+          yAxisIndex: 0,
+          data: periodes.map((p) => p.sortants),
+          itemStyle: { color: '#2E7D32', borderRadius: [6, 6, 0, 0] },
+        },
+        {
+          name: 'Stock cumule',
           type: 'line',
           yAxisIndex: 1,
-          data: timeline.map((p) => Math.round(p.avgAge)),
-          itemStyle: { color: '#FF8F00' },
-          lineStyle: { color: '#FF8F00' },
+          data: periodes.map((p) => p.stockCumule),
+          smooth: true,
           symbol: 'circle',
           symbolSize: 6,
+          lineStyle: { width: 2.5, color: '#FF8F00' },
+          itemStyle: { color: '#FF8F00', borderColor: '#fff', borderWidth: 2 },
+          areaStyle: {
+            color: {
+              type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+              colorStops: [
+                { offset: 0, color: 'rgba(255,143,0,0.15)' },
+                { offset: 1, color: 'rgba(255,143,0,0.02)' },
+              ],
+            },
+          },
         },
       ],
     };
-  }, [timeline]);
+  }, [periodes]);
 
-  const { chartRef } = useECharts(timeline.length >= 2 ? chartOption : {}, undefined, 'cpam-material');
+  const withMttr = useMemo(() => periodes.filter((p) => p.mttrJours != null), [periodes]);
 
-  if (loading) {
+  const mttrOption = useMemo<EChartsCoreOption>(() => {
+    if (withMttr.length === 0) return {};
+    return {
+      tooltip: {
+        trigger: 'axis',
+        formatter: (params: Array<{ name: string; value: number; marker: string }>) => {
+          const p = params[0];
+          return p ? `${p.name}<br/>${p.marker} MTTR: <b>${p.value.toFixed(1)} j</b>` : '';
+        },
+      },
+      grid: { left: 55, right: 20, top: 30, bottom: 30 },
+      xAxis: { type: 'category', data: withMttr.map((p) => p.periodKey), axisLabel: { fontSize: 11 } },
+      yAxis: { type: 'value', name: 'Jours' },
+      series: [
+        {
+          name: 'MTTR',
+          type: 'line',
+          data: withMttr.map((p) => Math.round((p.mttrJours ?? 0) * 10) / 10),
+          smooth: true,
+          symbol: 'circle',
+          symbolSize: 6,
+          lineStyle: { width: 2.5, color: '#6A1B9A' },
+          itemStyle: { color: '#6A1B9A', borderColor: '#fff', borderWidth: 2 },
+          areaStyle: {
+            color: {
+              type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+              colorStops: [
+                { offset: 0, color: 'rgba(106,27,154,0.15)' },
+                { offset: 1, color: 'rgba(106,27,154,0.02)' },
+              ],
+            },
+          },
+        },
+      ],
+    };
+  }, [withMttr]);
+
+  const { chartRef: volumeRef } = useECharts(volumeOption, undefined, 'cpam-material');
+  const { chartRef: mttrRef } = useECharts(withMttr.length > 0 ? mttrOption : {}, undefined, 'cpam-material');
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 animate-fade-slide-up animation-delay-150">
+      <div className="bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)] p-5">
+        <h3 className="text-sm font-semibold font-[DM_Sans] text-slate-700 mb-3">Volumetrie</h3>
+        <div ref={volumeRef} style={{ height: 300 }} />
+      </div>
+      <div className="bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)] p-5">
+        <h3 className="text-sm font-semibold font-[DM_Sans] text-slate-700 mb-3">MTTR — Delai moyen de resolution</h3>
+        {withMttr.length > 0 ? (
+          <div ref={mttrRef} style={{ height: 300 }} />
+        ) : (
+          <div className="h-[300px] flex items-center justify-center text-sm text-slate-400">
+            Aucun ticket resolu sur la periode
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function HistoriqueTab({ technicien }: { technicien: string }) {
+  const { data, loading, error, execute } = useInvoke<TechHistory>();
+  const [granularity, setGranularity] = useState<Granularity>('month');
+
+  useEffect(() => {
+    execute('get_technician_history', { technicien, granularity });
+  }, [technicien, granularity]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (loading && !data) {
     return (
       <div className="py-12 text-center text-sm text-slate-400">Chargement de l'historique...</div>
     );
@@ -113,53 +200,101 @@ function HistoriqueTab({ technicien }: { technicien: string }) {
     );
   }
 
-  if (timeline.length < 2) {
+  if (!data || data.periodes.length === 0) {
     return (
       <div className="py-12 text-center text-sm text-slate-400">
-        Donnees insuffisantes pour l'historique (au moins 2 imports requis)
+        Aucune donnee historique disponible
       </div>
     );
   }
 
-  return (
-    <div className="space-y-4 pt-4">
-      {/* Chart */}
-      <div
-        ref={chartRef}
-        className="rounded-2xl bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)]"
-        style={{ height: 320 }}
-      />
+  const { kpi, periodes } = data;
 
-      {/* Summary table */}
-      <div className="rounded-2xl bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)] overflow-auto">
+  return (
+    <div className="space-y-5 pt-4">
+      {/* ── Granularity selector ── */}
+      <div className="flex items-center justify-between animate-fade-slide-up">
+        <div />
+        <div className="flex items-center gap-1 bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)] p-1">
+          {GRAN_OPTIONS.map((g) => (
+            <button
+              key={g.value}
+              onClick={() => setGranularity(g.value)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold font-[DM_Sans] transition-colors duration-150 ${
+                granularity === g.value
+                  ? 'bg-primary-500 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-600'
+              }`}
+            >
+              {g.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── KPI Cards ── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-5 animate-fade-slide-up">
+        <KpiCard
+          label="Entrants"
+          value={kpi.totalEntrants}
+          accentColor="#1565C0"
+          icon={<ArrowDownToLine size={18} color="#1565C0" />}
+        />
+        <KpiCard
+          label="Sortants"
+          value={kpi.totalSortants}
+          accentColor="#2E7D32"
+          icon={<ArrowUpFromLine size={18} color="#2E7D32" />}
+        />
+        <KpiCard
+          label="MTTR moyen"
+          value={kpi.mttrJours != null ? Math.round(kpi.mttrJours) : '—'}
+          format="days"
+          accentColor="#FF8F00"
+          icon={<Clock size={18} color="#FF8F00" />}
+        />
+        <KpiCard
+          label="Stock actuel"
+          value={kpi.stockActuel}
+          accentColor={kpi.stockActuel > 20 ? '#C62828' : '#64748B'}
+          icon={<Package size={18} color={kpi.stockActuel > 20 ? '#C62828' : '#64748B'} />}
+        />
+      </div>
+
+      {/* ── Charts (separate component so useECharts mounts with DOM ready) ── */}
+      <HistoriqueCharts periodes={periodes} />
+
+      {/* ── Recap table ── */}
+      <div className="animate-fade-slide-up animation-delay-300 rounded-2xl bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)] overflow-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-100">
-              <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-400 font-[DM_Sans]">
-                Date import
-              </th>
-              <th className="px-6 py-3.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-400 font-[DM_Sans]">
-                Tickets
-              </th>
-              <th className="px-6 py-3.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-400 font-[DM_Sans]">
-                Age moyen (j)
-              </th>
+              <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-400 font-[DM_Sans]">Periode</th>
+              <th className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-400 font-[DM_Sans]">Entrants</th>
+              <th className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-400 font-[DM_Sans]">Sortants</th>
+              <th className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-400 font-[DM_Sans]">Delta</th>
+              <th className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-400 font-[DM_Sans]">Stock</th>
+              <th className="px-6 py-3.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-400 font-[DM_Sans]">MTTR (j)</th>
             </tr>
           </thead>
           <tbody>
-            {timeline.map((pt) => (
-              <tr key={pt.importId} className="border-b border-slate-50 last:border-0 hover:bg-[rgba(12,65,154,0.04)] transition-colors duration-100">
-                <td className="px-6 py-3.5 text-slate-800">
-                  {new Date(pt.importDate).toLocaleDateString('fr-FR')}
-                </td>
-                <td className="px-6 py-3.5 text-right text-slate-800 font-semibold font-[DM_Sans] tabular-nums">
-                  {pt.ticketCount.toLocaleString('fr-FR')}
-                </td>
-                <td className="px-6 py-3.5 text-right text-slate-800 font-semibold font-[DM_Sans] tabular-nums">
-                  {Math.round(pt.avgAge)}
-                </td>
-              </tr>
-            ))}
+            {periodes.map((p) => {
+              const delta = p.entrants - p.sortants;
+              return (
+                <tr key={p.periodKey} className="border-b border-slate-50 last:border-0 hover:bg-[rgba(12,65,154,0.04)] transition-colors duration-100">
+                  <td className="px-6 py-3 text-slate-800 font-medium">{p.periodKey}</td>
+                  <td className="px-4 py-3 text-right text-slate-800 font-semibold font-[DM_Sans] tabular-nums">{p.entrants}</td>
+                  <td className="px-4 py-3 text-right text-slate-800 font-semibold font-[DM_Sans] tabular-nums">{p.sortants}</td>
+                  <td className={`px-4 py-3 text-right font-semibold font-[DM_Sans] tabular-nums ${delta > 0 ? 'text-red-600' : delta < 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
+                    {delta > 0 ? `+${delta}` : delta}
+                  </td>
+                  <td className="px-4 py-3 text-right text-slate-800 font-semibold font-[DM_Sans] tabular-nums">{p.stockCumule}</td>
+                  <td className="px-6 py-3 text-right text-slate-500 font-[DM_Sans] tabular-nums">
+                    {p.mttrJours != null ? p.mttrJours.toFixed(1) : '—'}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

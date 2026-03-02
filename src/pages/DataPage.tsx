@@ -8,7 +8,9 @@ import {
   AlertTriangle,
   Clock,
   History,
+  Trash2,
 } from 'lucide-react';
+import { invoke } from '@tauri-apps/api/core';
 import { useImport } from '../hooks/useImport';
 import { useInvoke } from '../hooks/useInvoke';
 import type { ImportHistory } from '../types/config';
@@ -132,6 +134,25 @@ function ImportContent() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [result]);
+
+  async function handleSetActive(id: number) {
+    try {
+      await invoke('set_active_import', { importId: id });
+      fetchHistory('get_import_history');
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function handleDelete(id: number, filename: string) {
+    if (!window.confirm(`Supprimer l'import "${filename}" et tous ses tickets ?`)) return;
+    try {
+      await invoke('delete_import', { importId: id });
+      fetchHistory('get_import_history');
+    } catch (err) {
+      console.error(err);
+    }
+  }
 
   async function handleBrowse() {
     const selected = await open({
@@ -269,7 +290,8 @@ function ImportContent() {
                     <th className="pb-2 pr-4 text-xs font-semibold uppercase tracking-wider text-slate-400 font-[DM_Sans]">Fichier</th>
                     <th className="pb-2 pr-4 text-xs font-semibold uppercase tracking-wider text-slate-400 font-[DM_Sans]">Date</th>
                     <th className="pb-2 pr-4 text-xs font-semibold uppercase tracking-wider text-slate-400 font-[DM_Sans] text-right">Tickets</th>
-                    <th className="pb-2 text-xs font-semibold uppercase tracking-wider text-slate-400 font-[DM_Sans]">Statut</th>
+                    <th className="pb-2 pr-4 text-xs font-semibold uppercase tracking-wider text-slate-400 font-[DM_Sans]">Statut</th>
+                    <th className="pb-2 text-xs font-semibold uppercase tracking-wider text-slate-400 font-[DM_Sans] w-16"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -278,12 +300,29 @@ function ImportContent() {
                       <td className="py-2 pr-4 text-slate-700 font-medium truncate max-w-[200px]">{h.filename}</td>
                       <td className="py-2 pr-4 text-slate-500 whitespace-nowrap">{formatDate(h.importDate)}</td>
                       <td className="py-2 pr-4 text-right text-slate-700 font-semibold font-[DM_Sans] tabular-nums">{h.totalRows.toLocaleString('fr-FR')}</td>
-                      <td className="py-2">
+                      <td className="py-2 pr-4">
                         {h.isActive ? (
                           <span className="inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-medium bg-success-50 text-success-500">Actif</span>
                         ) : (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-medium bg-slate-100 text-slate-500">Archive</span>
+                          <button
+                            type="button"
+                            onClick={() => handleSetActive(h.id)}
+                            className="inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-medium bg-slate-100 text-slate-500 hover:bg-primary-50 hover:text-primary-500 transition-colors duration-150 cursor-pointer"
+                            title="Activer cet import"
+                          >
+                            Archive
+                          </button>
                         )}
+                      </td>
+                      <td className="py-2 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(h.id, h.filename)}
+                          className="p-1.5 rounded-lg text-slate-300 hover:text-danger-500 hover:bg-danger-50 transition-colors duration-150"
+                          title="Supprimer cet import"
+                        >
+                          <Trash2 size={15} />
+                        </button>
                       </td>
                     </tr>
                   ))}
