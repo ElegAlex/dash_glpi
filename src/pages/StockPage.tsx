@@ -1,16 +1,123 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useInvoke } from '../hooks/useInvoke';
+import { useECharts } from '../hooks/useECharts';
 import { useFilterStore } from '../stores/filterStore';
 import { KpiCards } from '../components/stock/KpiCards';
 import { TechnicianTable } from '../components/stock/TechnicianTable';
 import { Card } from '../components/shared/Card';
-import type { StockOverview, TechnicianStats } from '../types/kpi';
+import type { StockOverview, TechnicianStats, CategoryTree, CategoryNode } from '../types/kpi';
+import '../lib/echarts-theme';
+
+const PALETTE = ['#1565C0', '#2E7D32', '#FF8F00', '#6A1B9A', '#00838F', '#C62828', '#4E342E', '#37474F'];
+
+function CategoryBarChart({ tree }: { tree: CategoryTree }) {
+  const [drillPath, setDrillPath] = useState<CategoryNode[]>([]);
+
+  const currentNodes = useMemo(() => {
+    if (drillPath.length === 0) return tree.nodes;
+    return drillPath[drillPath.length - 1].children;
+  }, [tree, drillPath]);
+
+  const sorted = useMemo(
+    () => [...currentNodes].sort((a, b) => b.count - a.count).slice(0, 15),
+    [currentNodes],
+  );
+
+  const option = useMemo(() => {
+    const labels = sorted.map((n) => n.name);
+    const values = sorted.map((n) => n.count);
+
+    return {
+      tooltip: {
+        trigger: 'axis' as const,
+        axisPointer: { type: 'shadow' as const },
+      },
+      grid: { left: 200, right: 40, top: 10, bottom: 20 },
+      xAxis: { type: 'value' as const },
+      yAxis: {
+        type: 'category' as const,
+        data: labels,
+        inverse: true,
+        axisLabel: { fontSize: 11, width: 180, overflow: 'truncate' as const },
+      },
+      series: [
+        {
+          type: 'bar' as const,
+          data: values.map((val, idx) => ({
+            value: val,
+            itemStyle: { color: PALETTE[idx % PALETTE.length], borderRadius: [0, 6, 6, 0] },
+          })),
+          barWidth: '60%',
+          cursor: 'pointer',
+          label: {
+            show: true,
+            position: 'right' as const,
+            fontSize: 11,
+            color: '#64748B',
+            formatter: (params: { value: number }) => params.value.toLocaleString('fr-FR'),
+          },
+        },
+      ],
+    };
+  }, [sorted]);
+
+  const onEvents = useMemo(() => ({
+    click: (params: unknown) => {
+      const p = params as { dataIndex?: number };
+      if (p.dataIndex == null) return;
+      const clicked = sorted[p.dataIndex];
+      if (clicked && clicked.children.length > 0) {
+        setDrillPath((prev) => [...prev, clicked]);
+      }
+    },
+  }), [sorted]);
+
+  const { chartRef } = useECharts(option, onEvents, 'cpam-material');
+
+  const handleBreadcrumb = useCallback((depth: number) => {
+    setDrillPath((prev) => prev.slice(0, depth));
+  }, []);
+
+  const barCount = Math.min(sorted.length, 15);
+
+  return (
+    <div>
+      {drillPath.length > 0 && (
+        <div className="flex items-center gap-1 mb-3 text-xs">
+          <button
+            onClick={() => handleBreadcrumb(0)}
+            className="text-primary-500 hover:underline cursor-pointer font-medium"
+          >
+            Toutes
+          </button>
+          {drillPath.map((node, i) => (
+            <span key={node.fullPath} className="flex items-center gap-1">
+              <span className="text-slate-300">/</span>
+              {i < drillPath.length - 1 ? (
+                <button
+                  onClick={() => handleBreadcrumb(i + 1)}
+                  className="text-primary-500 hover:underline cursor-pointer font-medium"
+                >
+                  {node.name}
+                </button>
+              ) : (
+                <span className="text-slate-600 font-semibold">{node.name}</span>
+              )}
+            </span>
+          ))}
+        </div>
+      )}
+      <div ref={chartRef} style={{ height: Math.max(220, barCount * 32), width: '100%' }} />
+    </div>
+  );
+}
 
 function StockPage() {
   const { statut, typeTicket, groupe, resetFilters, setStatut, setTypeTicket, setGroupe } = useFilterStore();
 
   const overviewHook = useInvoke<StockOverview>();
   const techHook = useInvoke<TechnicianStats[]>();
+  const catHook = useInvoke<CategoryTree>();
 
   const filters = useMemo(
     () => ({ statut: statut || null, typeTicket: typeTicket || null, groupe: groupe || null }),
@@ -24,6 +131,10 @@ function StockPage() {
   useEffect(() => {
     techHook.execute('get_stock_by_technician', { filters });
   }, [filters]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    catHook.execute('get_categories_tree', { request: { scope: 'all' } });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Extract unique filter values from technician data
   const groupOptions = useMemo(() => {
@@ -125,6 +236,18 @@ function StockPage() {
             </div>
           </Card>
         </div>
+
+        {/* Category distribution */}
+        {catHook.data && catHook.data.nodes.length > 0 && (
+          <div className="animate-fade-slide-up animation-delay-300">
+            <Card>
+              <h3 className="text-sm font-semibold font-[DM_Sans] text-slate-700 mb-3">
+                {catHook.data.source === 'categorie' ? 'Repartition par categorie' : 'Repartition par groupe'}
+              </h3>
+              <CategoryBarChart tree={catHook.data} />
+            </Card>
+          </div>
+        )}
 
         {/* Technician table */}
         <div className="animate-fade-slide-up animation-delay-300 space-y-2">

@@ -115,10 +115,24 @@ pub async fn get_categories_tree(
     request: CategoriesRequest,
 ) -> Result<CategoryTree, String> {
     state.db(|conn| {
-        let raw = queries::get_category_tree_data(conn)?;
+        // Déterminer la source : auto-détection ou forçage
+        let use_categorie = match request.source.as_deref() {
+            Some("categorie") => true,
+            Some("groupe") => false,
+            _ => {
+                // Auto : utiliser catégories ITIL si disponibles, sinon groupes
+                queries::has_categorie_data(conn).unwrap_or(false)
+            }
+        };
+
+        let (raw, source) = if use_categorie {
+            (queries::get_categorie_tree_data(conn)?, "categorie".to_string())
+        } else {
+            (queries::get_group_tree_data(conn)?, "groupe".to_string())
+        };
+
         let total: usize = raw.iter().map(|(_, c, _, _)| *c as usize).sum();
         let nodes = build_tree_nodes(raw, total);
-        let source = request.source.unwrap_or_else(|| request.scope.clone());
         Ok(CategoryTree {
             source,
             nodes,

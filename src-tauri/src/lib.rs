@@ -293,12 +293,12 @@ mod e2e_tests {
         let mut techs_enriched = crate::db::queries::get_technicians_stock(&conn, None).unwrap();
         crate::analyzer::stock::enrich_technician_stock(&mut techs_enriched, &config);
 
-        // 6. Verify get_category_tree_data
-        let categories =
-            crate::db::queries::get_category_tree_data(&conn).expect("get_category_tree_data failed");
+        // 6. Verify get_group_tree_data
+        let groups_tree =
+            crate::db::queries::get_group_tree_data(&conn).expect("get_group_tree_data failed");
         assert!(
-            !categories.is_empty(),
-            "Should have category/group data"
+            !groups_tree.is_empty(),
+            "Should have group data"
         );
 
         // 7. Verify FTS search

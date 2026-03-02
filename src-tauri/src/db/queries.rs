@@ -777,9 +777,9 @@ pub fn get_technician_history(
     })
 }
 
-/// Données brutes pour construire l'arbre catégories/groupes.
+/// Données brutes pour construire l'arbre par groupes de techniciens.
 /// Retourne (groupe_principal, total_vivants, incidents, demandes).
-pub fn get_category_tree_data(
+pub fn get_group_tree_data(
     conn: &Connection,
 ) -> Result<Vec<(String, i64, i64, i64)>, rusqlite::Error> {
     let import_id = get_active_import_id(conn)?;
@@ -804,6 +804,47 @@ pub fn get_category_tree_data(
         })?
         .collect::<Result<Vec<_>, _>>()?;
     Ok(rows)
+}
+
+/// Données brutes pour construire l'arbre par catégories ITIL.
+/// Retourne (categorie, total_vivants, incidents, demandes).
+pub fn get_categorie_tree_data(
+    conn: &Connection,
+) -> Result<Vec<(String, i64, i64, i64)>, rusqlite::Error> {
+    let import_id = get_active_import_id(conn)?;
+    let mut stmt = conn.prepare_cached(
+        "SELECT categorie,
+                COUNT(*) AS total,
+                SUM(CASE WHEN type_ticket = 'Incident' THEN 1 ELSE 0 END) AS incidents,
+                SUM(CASE WHEN type_ticket = 'Demande'  THEN 1 ELSE 0 END) AS demandes
+         FROM tickets
+         WHERE import_id = ?1 AND est_vivant = 1
+           AND categorie IS NOT NULL AND categorie != ''
+         GROUP BY categorie
+         ORDER BY total DESC",
+    )?;
+    let rows = stmt
+        .query_map(rusqlite::params![import_id], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, i64>(2)?,
+                row.get::<_, i64>(3)?,
+            ))
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
+/// Vérifie si l'import actif contient des données de catégorie ITIL exploitables.
+pub fn has_categorie_data(conn: &Connection) -> Result<bool, rusqlite::Error> {
+    let import_id = get_active_import_id(conn)?;
+    let count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM tickets WHERE import_id = ?1 AND categorie IS NOT NULL AND categorie != ''",
+        rusqlite::params![import_id],
+        |row| row.get(0),
+    )?;
+    Ok(count > 0)
 }
 
 /// Recherche FTS5 full-text dans les tickets de l'import actif.
@@ -1327,7 +1368,7 @@ mod tests {
     #[test]
     fn test_category_tree_data() {
         let (conn, _) = setup();
-        let data = get_category_tree_data(&conn).unwrap();
+        let data = get_group_tree_data(&conn).unwrap();
         assert_eq!(data.len(), 2);
         // _DSI > _SUPPORT : 2 tickets vivants (Incident + Demande)
         assert_eq!(data[0].1, 2);

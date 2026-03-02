@@ -90,21 +90,25 @@ function CategoriesPage() {
     );
   }, [data]);
 
+  const isCategorie = data?.source === 'categorie';
+
   return (
     <div>
       <header className="sticky top-0 z-10 bg-[#F5F7FA]/80 backdrop-blur-sm px-8 pt-6 pb-4 border-b border-slate-200/30">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold font-[DM_Sans] text-slate-800 tracking-tight">
-              Categories
+              {isCategorie ? 'Categories ITIL' : 'Categories'}
             </h1>
             <p className="text-sm text-slate-400 mt-1">
-              Arborescence des categories de tickets
+              {isCategorie
+                ? 'Arborescence des categories ITIL des tickets'
+                : 'Arborescence des groupes de techniciens'}
             </p>
           </div>
           {data && (
             <span className="inline-flex items-center rounded-xl bg-primary-50 px-3 py-1 text-xs font-medium text-primary-500">
-              Source : {data.source === 'groupes' ? 'Groupes de techniciens' : 'Categories ITIL'}
+              Source : {isCategorie ? 'Categories ITIL' : 'Groupes de techniciens'}
             </span>
           )}
         </div>
@@ -134,13 +138,13 @@ function CategoriesPage() {
                 accentColor="#0C419A"
               />
               <KpiCard
-                label="Groupes"
+                label={isCategorie ? 'Categories' : 'Groupes'}
                 value={data.nodes.length}
                 icon={<FolderTree size={18} className="text-purple-600" />}
                 accentColor="#6A1B9A"
               />
               <KpiCard
-                label="Top categorie"
+                label={isCategorie ? 'Top categorie' : 'Top groupe'}
                 value={topCategory ? topCategory.name : '—'}
                 icon={<Layers size={18} className="text-amber-600" />}
                 accentColor="#FF8F00"
@@ -164,7 +168,9 @@ function CategoriesPage() {
             <div className="animate-fade-slide-up animation-delay-300">
               <div className="rounded-2xl bg-white overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)]">
                 <div className="px-6 py-4">
-                  <h2 className="text-lg font-semibold font-[DM_Sans] text-slate-700">Detail par groupe</h2>
+                  <h2 className="text-lg font-semibold font-[DM_Sans] text-slate-700">
+                    {isCategorie ? 'Detail par categorie' : 'Detail par groupe'}
+                  </h2>
                 </div>
                 <div>
                   {data.nodes.map((node) => (
@@ -175,7 +181,9 @@ function CategoriesPage() {
                       <div>
                         <span className="font-medium text-sm text-slate-800">{node.name}</span>
                         {node.children.length > 0 && (
-                          <span className="ml-2 text-xs text-slate-400">({node.children.length} sous-groupes)</span>
+                          <span className="ml-2 text-xs text-slate-400">
+                            ({node.children.length} {isCategorie ? 'sous-categories' : 'sous-groupes'})
+                          </span>
                         )}
                       </div>
                       <div className="flex items-center gap-4 text-sm">

@@ -83,9 +83,9 @@ function SoldeEvolutionChart({ data }: { data: VolumePeriode[] }) {
   return <div ref={chartRef} style={{ height: 280, width: '100%' }} />;
 }
 
-function GroupeBarChart({ data }: { data: VentilationItem[] }) {
+function HorizontalBarChart({ data, limit = 10 }: { data: VentilationItem[]; limit?: number }) {
   const option = useMemo(() => {
-    const top10 = [...data].sort((a, b) => b.total - a.total).slice(0, 10);
+    const top10 = [...data].sort((a, b) => b.total - a.total).slice(0, limit);
     const labels = top10.map((d) => d.label);
     const values = top10.map((d) => d.total);
 
@@ -141,6 +141,8 @@ function GroupeBarChart({ data }: { data: VentilationItem[] }) {
 }
 
 export function TypologieSection({ typologie, volumes }: TypologieSectionProps) {
+  const hasCategories = typologie.categorieDisponible && typologie.parCategorie && typologie.parCategorie.length > 0;
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
       <Card>
@@ -151,9 +153,12 @@ export function TypologieSection({ typologie, volumes }: TypologieSectionProps) 
       </Card>
       <Card>
         <h3 className="text-sm font-semibold font-[DM_Sans] text-slate-700 mb-3">
-          Top 10 groupes
+          {hasCategories ? 'Top 15 categories' : 'Top 10 groupes'}
         </h3>
-        <GroupeBarChart data={typologie.parGroupe} />
+        {hasCategories
+          ? <HorizontalBarChart data={typologie.parCategorie!} limit={15} />
+          : <HorizontalBarChart data={typologie.parGroupe} />
+        }
       </Card>
     </div>
   );
