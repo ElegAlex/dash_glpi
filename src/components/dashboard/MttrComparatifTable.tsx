@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { useNavigate } from 'react-router';
 import type { MttrParDimension } from '../../types/dashboard';
 
 interface MttrComparatifTableProps {
@@ -6,6 +7,7 @@ interface MttrComparatifTableProps {
 }
 
 export function MttrComparatifTable({ data }: MttrComparatifTableProps) {
+  const navigate = useNavigate();
   const sorted = useMemo(
     () => [...data].sort((a, b) => b.count - a.count).slice(0, 20),
     [data],
@@ -47,8 +49,13 @@ export function MttrComparatifTable({ data }: MttrComparatifTableProps) {
               key={row.label}
               className="hover:bg-[rgba(12,65,154,0.04)] transition-colors duration-100"
             >
-              <td className="px-5 py-3 text-sm font-[Source_Sans_3] text-slate-800">
-                {row.label}
+              <td className="px-5 py-3 text-sm font-[Source_Sans_3]">
+                <button
+                  className="text-[#0C419A] hover:underline font-medium text-left"
+                  onClick={() => navigate(`/stock/${encodeURIComponent(row.label)}`)}
+                >
+                  {row.label}
+                </button>
               </td>
               <td className="px-5 py-3 text-right font-[DM_Sans] font-semibold tabular-nums text-sm text-slate-800">
                 {row.count.toLocaleString('fr-FR')}

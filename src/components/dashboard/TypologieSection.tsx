@@ -70,9 +70,24 @@ function SoldeEvolutionChart({ data }: { data: VolumePeriode[] }) {
           markLine: {
             silent: true,
             symbol: 'none',
-            lineStyle: { type: 'dashed' as const, color: '#94A3B8', width: 1 },
-            data: [{ yAxis: 0 }],
-            label: { show: false },
+            data: [
+              {
+                yAxis: 0,
+                lineStyle: { type: 'dashed' as const, color: '#94A3B8', width: 1 },
+                label: { show: false },
+              },
+              {
+                yAxis: 80,
+                lineStyle: { type: 'dotted' as const, color: '#C62828', width: 2 },
+                label: {
+                  formatter: 'Objectif: 80',
+                  position: 'insideEndTop' as const,
+                  color: '#C62828',
+                  fontSize: 11,
+                  fontWeight: 600,
+                },
+              },
+            ],
           },
         },
       ],

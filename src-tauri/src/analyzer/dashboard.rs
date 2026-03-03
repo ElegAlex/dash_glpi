@@ -61,7 +61,17 @@ pub struct ResolutionKpi {
     pub par_technicien: Vec<MttrParDimension>,
     pub distribution_tranches: Vec<TrancheDelai>,
     pub trend_mensuel: Vec<MttrTrend>,
+    pub resolution_speed_trend: Vec<ResolutionSpeedTrend>,
     pub echantillon: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResolutionSpeedTrend {
+    pub periode: String,
+    pub pct_24h: f64,
+    pub pct_48h: f64,
+    pub total_resolus: i64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -414,32 +424,32 @@ fn build_prise_en_charge(
 }
 
 fn build_pec_distribution(delays: &[f64], total: i64) -> Vec<TrancheDelai> {
-    let mut lt1 = 0i64;
-    let mut from1to3 = 0i64;
-    let mut from3to7 = 0i64;
-    let mut from7to15 = 0i64;
-    let mut gt15 = 0i64;
+    let mut lt24h = 0i64;
+    let mut lt48h = 0i64;
+    let mut lt7j = 0i64;
+    let mut lt30j = 0i64;
+    let mut ge30j = 0i64;
 
     for &d in delays {
         if d < 1.0 {
-            lt1 += 1;
-        } else if d < 3.0 {
-            from1to3 += 1;
+            lt24h += 1;
+        } else if d < 2.0 {
+            lt48h += 1;
         } else if d < 7.0 {
-            from3to7 += 1;
-        } else if d < 15.0 {
-            from7to15 += 1;
+            lt7j += 1;
+        } else if d < 30.0 {
+            lt30j += 1;
         } else {
-            gt15 += 1;
+            ge30j += 1;
         }
     }
 
     vec![
-        TrancheDelai { label: "< 1 jour".to_string(), count: lt1, pourcentage: pct(lt1, total) },
-        TrancheDelai { label: "1-3 jours".to_string(), count: from1to3, pourcentage: pct(from1to3, total) },
-        TrancheDelai { label: "3-7 jours".to_string(), count: from3to7, pourcentage: pct(from3to7, total) },
-        TrancheDelai { label: "7-15 jours".to_string(), count: from7to15, pourcentage: pct(from7to15, total) },
-        TrancheDelai { label: "> 15 jours".to_string(), count: gt15, pourcentage: pct(gt15, total) },
+        TrancheDelai { label: "< 24h".to_string(), count: lt24h, pourcentage: pct(lt24h, total) },
+        TrancheDelai { label: "24h - 48h".to_string(), count: lt48h, pourcentage: pct(lt48h, total) },
+        TrancheDelai { label: "2j - 7j".to_string(), count: lt7j, pourcentage: pct(lt7j, total) },
+        TrancheDelai { label: "7j - 30j".to_string(), count: lt30j, pourcentage: pct(lt30j, total) },
+        TrancheDelai { label: "> 30j".to_string(), count: ge30j, pourcentage: pct(ge30j, total) },
     ]
 }
 
@@ -500,6 +510,9 @@ fn build_resolution(
     // Monthly trend
     let trend_mensuel = build_resolution_trend(conn, import_id, date_clause, date_params, gran)?;
 
+    // Resolution speed trend (% < 24h and % < 48h per period)
+    let resolution_speed_trend = build_resolution_speed_trend(conn, import_id, date_clause, date_params, gran)?;
+
     Ok(ResolutionKpi {
         mttr_global_jours: mttr_global,
         mediane_jours: mediane,
@@ -511,6 +524,7 @@ fn build_resolution(
         par_technicien,
         distribution_tranches,
         trend_mensuel,
+        resolution_speed_trend,
         echantillon,
     })
 }
@@ -663,6 +677,62 @@ fn build_resolution_trend(
             mttr_jours: round1(moyenne(durs)),
             mediane_jours: round1(percentile(durs, 50.0)),
             nb_resolus: durs.len() as i64,
+        });
+    }
+
+    Ok(trends)
+}
+
+fn build_resolution_speed_trend(
+    conn: &Connection,
+    import_id: i64,
+    date_clause: &str,
+    date_params: &[String],
+    gran: &str,
+) -> Result<Vec<ResolutionSpeedTrend>, rusqlite::Error> {
+    let pe = period_expr(gran, "date_cloture_approx");
+    let sql = format!(
+        "SELECT {pe} AS periode,
+                julianday(date_cloture_approx) - julianday(date_ouverture) AS dur
+         FROM tickets
+         WHERE import_id = ? AND est_vivant = 0
+           AND date_cloture_approx IS NOT NULL AND date_ouverture IS NOT NULL{}
+         ORDER BY periode",
+        date_clause
+    );
+    let mut all_params: Vec<Box<dyn rusqlite::types::ToSql>> = vec![Box::new(import_id)];
+    for p in date_params {
+        all_params.push(Box::new(p.clone()));
+    }
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map(
+        rusqlite::params_from_iter(all_params.iter().map(|b| b.as_ref())),
+        |row| Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?)),
+    )?;
+
+    let mut by_period: BTreeMap<String, (i64, i64, i64)> = BTreeMap::new(); // (total, <24h, <48h)
+    for row in rows {
+        let (p, dur) = row?;
+        if dur >= 0.0 {
+            let entry = by_period.entry(p).or_insert((0, 0, 0));
+            entry.0 += 1;
+            if dur < 1.0 {
+                entry.1 += 1;
+                entry.2 += 1;
+            } else if dur < 2.0 {
+                entry.2 += 1;
+            }
+        }
+    }
+
+    let mut trends = Vec::new();
+    for (p, (total, lt24, lt48)) in &by_period {
+        let t = *total as f64;
+        trends.push(ResolutionSpeedTrend {
+            periode: p.clone(),
+            pct_24h: if t > 0.0 { (*lt24 as f64 / t * 1000.0).round() / 10.0 } else { 0.0 },
+            pct_48h: if t > 0.0 { (*lt48 as f64 / t * 1000.0).round() / 10.0 } else { 0.0 },
+            total_resolus: *total,
         });
     }
 

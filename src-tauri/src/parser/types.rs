@@ -18,6 +18,7 @@ pub struct GlpiTicketRaw {
     pub intervention_fournisseur: Option<String>,
     pub technicien: Option<String>,
     pub groupe: Option<String>,
+    pub date_resolution: Option<String>,
     pub categorie: Option<String>,
 }
 
@@ -48,6 +49,7 @@ pub struct GlpiTicketNormalized {
     pub categorie: Option<String>,
     pub categorie_niveau1: Option<String>,
     pub categorie_niveau2: Option<String>,
+    pub date_resolution: Option<String>,
     pub est_vivant: bool,
     pub anciennete_jours: Option<i64>,
     pub inactivite_jours: Option<i64>,

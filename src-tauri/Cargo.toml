@@ -25,6 +25,12 @@ serde_json = "1.0"
 # CSV parsing
 csv = "1.4"
 
+# Encodage (Latin-1, Windows-1252, BOM)
+encoding_rs = "0.8"
+
+# Lecture XLSX/XLS/ODS
+calamine = "0.26"
+
 # Dates
 chrono = { version = "0.4", features = ["serde"] }
 

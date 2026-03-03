@@ -19,7 +19,7 @@ pub fn bulk_insert_tickets(
                 technicien_principal, groupe_principal,
                 groupe_niveau1, groupe_niveau2, groupe_niveau3,
                 categorie, categorie_niveau1, categorie_niveau2,
-                est_vivant, anciennete_jours, inactivite_jours, date_cloture_approx,
+                date_resolution, est_vivant, anciennete_jours, inactivite_jours, date_cloture_approx,
                 action_recommandee, motif_classification
             ) VALUES (
                 ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8,
@@ -29,8 +29,8 @@ pub fn bulk_insert_tickets(
                 ?19, ?20,
                 ?21, ?22, ?23,
                 ?24, ?25, ?26,
-                ?27, ?28, ?29, ?30,
-                ?31, ?32
+                ?27, ?28, ?29, ?30, ?31,
+                ?32, ?33
             )",
         )?;
 
@@ -62,6 +62,7 @@ pub fn bulk_insert_tickets(
                 t.categorie,
                 t.categorie_niveau1,
                 t.categorie_niveau2,
+                t.date_resolution,
                 t.est_vivant as i32,
                 t.anciennete_jours,
                 t.inactivite_jours,

@@ -217,6 +217,7 @@ mod tests {
                 moyenne_sorties_par_periode: 8.5,
             },
             ventilation,
+            resolution: None,
         }
     }
 
@@ -264,6 +265,7 @@ mod tests {
                 moyenne_sorties_par_periode: 0.0,
             },
             ventilation: None,
+            resolution: None,
         };
         let request = make_request();
         let result = generate_bilan_report(&bilan, &request);

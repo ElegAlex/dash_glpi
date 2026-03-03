@@ -39,7 +39,15 @@ export interface ResolutionKpi {
   parTechnicien: MttrParDimension[];
   distributionTranches: TrancheDelai[];
   trendMensuel: MttrTrend[];
+  resolutionSpeedTrend: ResolutionSpeedTrend[];
   echantillon: number;
+}
+
+export interface ResolutionSpeedTrend {
+  periode: string;
+  pct24h: number;
+  pct48h: number;
+  totalResolus: number;
 }
 
 export interface TauxN1Kpi {

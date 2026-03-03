@@ -156,7 +156,7 @@ function ImportContent() {
 
   async function handleBrowse() {
     const selected = await open({
-      filters: [{ name: 'CSV', extensions: ['csv'] }],
+      filters: [{ name: 'GLPI Export', extensions: ['csv', 'xlsx', 'xls'] }],
     });
     if (typeof selected === 'string') {
       reset();

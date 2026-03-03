@@ -90,11 +90,14 @@ CREATE TABLE IF NOT EXISTS tickets (
     categorie_niveau1       TEXT,
     categorie_niveau2       TEXT,
 
+    -- Date de résolution (GLPI solvedate)
+    date_resolution         TEXT,                              -- ISO 8601, NULL si vivant
+
     -- Colonnes calculées
     est_vivant              INTEGER NOT NULL DEFAULT 0,        -- 0 = Clos/Résolu, 1 = vivant
     anciennete_jours        INTEGER,                           -- Jours depuis ouverture
     inactivite_jours        INTEGER,                           -- Jours depuis dernière modif
-    date_cloture_approx     TEXT,                              -- = dernière modif si terminé
+    date_cloture_approx     TEXT,                              -- = date_resolution si terminé
 
     -- Classification automatique
     action_recommandee      TEXT,                              -- 'cloturer', 'relancer', 'qualifier', 'escalader'
@@ -117,6 +120,7 @@ CREATE INDEX IF NOT EXISTS idx_tickets_groupe_n2       ON tickets(import_id, gro
 CREATE INDEX IF NOT EXISTS idx_tickets_type            ON tickets(import_id, type_ticket);
 CREATE INDEX IF NOT EXISTS idx_tickets_date_ouv        ON tickets(import_id, date_ouverture);
 CREATE INDEX IF NOT EXISTS idx_tickets_date_modif      ON tickets(import_id, derniere_modification);
+CREATE INDEX IF NOT EXISTS idx_tickets_date_resolution ON tickets(import_id, date_resolution);
 CREATE INDEX IF NOT EXISTS idx_tickets_anciennete      ON tickets(import_id, est_vivant, anciennete_jours);
 CREATE INDEX IF NOT EXISTS idx_tickets_categorie       ON tickets(import_id, categorie_niveau1, categorie_niveau2);
 ```
@@ -226,3 +230,4 @@ rusqlite = { version = "0.38", features = ["bundled", "fallible_uint", "cache"] 
 
 Système basé sur `PRAGMA user_version`. Fichiers SQL dans `src-tauri/src/db/sql/`:
 - `001_initial.sql` : schéma initial complet (voir ci-dessus)
+- `003_date_resolution.sql` : ajout colonne `date_resolution TEXT` + index

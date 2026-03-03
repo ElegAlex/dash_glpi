@@ -176,6 +176,8 @@ mod e2e_tests {
         let conn = Connection::open_in_memory().unwrap();
         conn.execute_batch(include_str!("db/sql/001_initial.sql"))
             .unwrap();
+        conn.execute_batch(include_str!("db/sql/003_date_resolution.sql"))
+            .unwrap();
         conn
     }
 
@@ -183,9 +185,9 @@ mod e2e_tests {
     #[test]
     fn test_e2e_import_and_query_pipeline() {
         let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_default();
-        let fixture_path = format!("{}/../ticket.csv", manifest_dir);
+        let fixture_path = format!("{}/../2023_today_reso.csv", manifest_dir);
         if !std::path::Path::new(&fixture_path).exists() {
-            eprintln!("Skipping E2E test: ticket.csv not found at {}", fixture_path);
+            eprintln!("Skipping E2E test: 2023_today_reso.csv not found at {}", fixture_path);
             return;
         }
 
@@ -232,7 +234,7 @@ mod e2e_tests {
                 vivants_count, termines_count,
                 detected_columns, unique_statuts, unique_types,
                 is_active
-             ) VALUES ('ticket.csv', ?1, ?2, ?3, ?4, ?5, '[]', '[]', '[]', 1)",
+             ) VALUES ('2023_today_reso.csv', ?1, ?2, ?3, ?4, ?5, '[]', '[]', '[]', 1)",
             rusqlite::params![
                 total as i64,
                 total as i64,
@@ -318,7 +320,7 @@ mod e2e_tests {
         let history =
             crate::db::queries::get_import_history(&conn).expect("get_import_history failed");
         assert_eq!(history.len(), 1);
-        assert_eq!(history[0].filename, "ticket.csv");
+        assert_eq!(history[0].filename, "2023_today_reso.csv");
         assert!(history[0].is_active);
     }
 
@@ -327,9 +329,9 @@ mod e2e_tests {
     /// Helper: setup DB, parse, classify, insert real tickets, return conn
     fn setup_with_real_data() -> Option<Connection> {
         let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_default();
-        let fixture_path = format!("{}/../ticket.csv", manifest_dir);
+        let fixture_path = format!("{}/../2023_today_reso.csv", manifest_dir);
         if !std::path::Path::new(&fixture_path).exists() {
-            eprintln!("Skipping E2E test: ticket.csv not found at {}", fixture_path);
+            eprintln!("Skipping E2E test: 2023_today_reso.csv not found at {}", fixture_path);
             return None;
         }
 
@@ -355,7 +357,7 @@ mod e2e_tests {
                 vivants_count, termines_count,
                 detected_columns, unique_statuts, unique_types,
                 is_active
-             ) VALUES ('ticket.csv', ?1, ?2, ?3, ?4, ?5, '[]', '[]', '[]', 1)",
+             ) VALUES ('2023_today_reso.csv', ?1, ?2, ?3, ?4, ?5, '[]', '[]', '[]', 1)",
             rusqlite::params![
                 total as i64,
                 total as i64,

@@ -6,7 +6,7 @@ import { CompactFilterBar } from '../components/shared/CompactFilterBar';
 import { KpiCards } from '../components/dashboard/KpiCards';
 import { VolumeChart } from '../components/dashboard/VolumeChart';
 import { MttrTrendChart } from '../components/dashboard/MttrTrendChart';
-import { DistributionDelaisChart } from '../components/dashboard/DistributionDelaisChart';
+import { ResolutionSpeedTrendChart } from '../components/dashboard/ResolutionSpeedTrendChart';
 import { TauxN1TrendChart } from '../components/dashboard/TauxN1TrendChart';
 import { TypologieSection } from '../components/dashboard/TypologieSection';
 import { MttrComparatifTable } from '../components/dashboard/MttrComparatifTable';
@@ -147,9 +147,9 @@ function DashboardPage() {
               </Card>
               <Card>
                 <h2 className="text-lg font-semibold font-[DM_Sans] text-slate-700 mb-4">
-                  Distribution des delais de resolution
+                  Rapidite de resolution
                 </h2>
-                <DistributionDelaisChart data={data.resolution.distributionTranches} />
+                <ResolutionSpeedTrendChart data={data.resolution.resolutionSpeedTrend} seuil={80} />
               </Card>
             </div>
 

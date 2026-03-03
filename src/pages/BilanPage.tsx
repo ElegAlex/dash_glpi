@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { subDays } from 'date-fns';
 import { invoke } from '@tauri-apps/api/core';
 import { ArrowDownToLine, ArrowUpFromLine, TrendingUp, BarChart3 } from 'lucide-react';
@@ -8,12 +8,72 @@ import { KpiCard } from '../components/shared/KpiCard';
 import { BilanTable } from '../components/shared/BilanTable';
 import { Card } from '../components/shared/Card';
 import { useInvoke } from '../hooks/useInvoke';
-import type { BilanTemporel } from '../types/kpi';
+import { useECharts } from '../hooks/useECharts';
+import type { BilanTemporel, BilanResolution } from '../types/kpi';
 import type { ImportHistory } from '../types/config';
 import { type DateRange, type Granularity } from '../components/shared/DateRangePicker';
+import type { EChartsCoreOption } from 'echarts/core';
+import '../lib/echarts-theme';
 
 function formatDate(d: Date): string {
   return d.toISOString().slice(0, 10);
+}
+
+const RESOLUTION_COLORS = ['#2E7D32', '#1565C0', '#FF8F00', '#6A1B9A', '#C62828'];
+
+function ResolutionChart({ resolution }: { resolution: BilanResolution }) {
+  const option = useMemo<EChartsCoreOption>(() => {
+    const labels = resolution.tranches.map((t) => t.label);
+    const values = resolution.tranches.map((t) => t.count);
+
+    return {
+      tooltip: {
+        trigger: 'axis' as const,
+        axisPointer: { type: 'shadow' as const },
+        formatter: (params: unknown) => {
+          const p = (params as Array<{ name: string; value: number }>)[0];
+          const tranche = resolution.tranches.find((t) => t.label === p.name);
+          return `<div style="font-size:13px;color:#1E293B">
+            <strong>${p.name}</strong><br/>
+            ${p.value.toLocaleString('fr-FR')} ticket(s)
+            ${tranche ? ` (${tranche.pourcentage}%)` : ''}
+          </div>`;
+        },
+      },
+      grid: { left: 100, right: 60, top: 10, bottom: 30 },
+      xAxis: { type: 'value' as const },
+      yAxis: {
+        type: 'category' as const,
+        data: labels,
+        inverse: true,
+        axisLabel: { fontSize: 12, fontFamily: 'DM Sans' },
+      },
+      series: [
+        {
+          type: 'bar' as const,
+          data: values.map((val, idx) => ({
+            value: val,
+            itemStyle: { color: RESOLUTION_COLORS[idx % RESOLUTION_COLORS.length], borderRadius: [0, 6, 6, 0] },
+          })),
+          barWidth: '55%',
+          label: {
+            show: true,
+            position: 'right' as const,
+            fontSize: 11,
+            color: '#64748B',
+            formatter: (params: { value: number; dataIndex: number }) => {
+              const t = resolution.tranches[params.dataIndex];
+              return `${params.value.toLocaleString('fr-FR')} (${t.pourcentage}%)`;
+            },
+          },
+        },
+      ],
+    };
+  }, [resolution]);
+
+  const { chartRef } = useECharts(option, undefined, 'cpam-material');
+
+  return <div ref={chartRef} className="h-[240px] w-full" />;
 }
 
 function BilanPage() {
@@ -140,6 +200,31 @@ function BilanPage() {
                     Evolution des flux
                   </h2>
                   <BilanChart periodes={periodes} />
+                </Card>
+              </div>
+            )}
+
+            {/* Resolution distribution */}
+            {data?.resolution && (
+              <div className="animate-fade-slide-up animation-delay-300">
+                <Card>
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-lg font-semibold font-[DM_Sans] text-slate-700">
+                      Temps de resolution
+                    </h2>
+                    <div className="flex items-center gap-4 text-sm">
+                      <span className="text-slate-400">
+                        {data.resolution.totalResolus.toLocaleString('fr-FR')} tickets resolus
+                      </span>
+                      <span className="font-[DM_Sans] font-semibold text-slate-600">
+                        MTTR : {data.resolution.mttrJours}j
+                      </span>
+                      <span className="font-[DM_Sans] font-semibold text-slate-600">
+                        Mediane : {data.resolution.medianeJours}j
+                      </span>
+                    </div>
+                  </div>
+                  <ResolutionChart resolution={data.resolution} />
                 </Card>
               </div>
             )}

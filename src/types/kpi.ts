@@ -48,6 +48,20 @@ export interface BilanTemporel {
   periodes: PeriodData[];
   totaux: BilanTotaux;
   ventilation: BilanVentilation[] | null;
+  resolution: BilanResolution | null;
+}
+
+export interface BilanResolution {
+  tranches: ResolutionTranche[];
+  totalResolus: number;
+  mttrJours: number;
+  medianeJours: number;
+}
+
+export interface ResolutionTranche {
+  label: string;
+  count: number;
+  pourcentage: number;
 }
 
 export interface PeriodData {

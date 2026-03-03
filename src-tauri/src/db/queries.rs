@@ -168,12 +168,13 @@ pub fn get_stock_overview(conn: &Connection) -> Result<StockOverview, rusqlite::
     )?;
 
     // 4. Distribution par tranches d'ancienneté — un seul scan
-    let (lt7, range7_30, range30_90, ge90) = conn.query_row(
+    let (lt1, range1_2, range2_7, range7_30, ge30) = conn.query_row(
         "SELECT
-            SUM(CASE WHEN anciennete_jours < 7  THEN 1 ELSE 0 END),
+            SUM(CASE WHEN anciennete_jours < 1  THEN 1 ELSE 0 END),
+            SUM(CASE WHEN anciennete_jours >= 1  AND anciennete_jours < 2  THEN 1 ELSE 0 END),
+            SUM(CASE WHEN anciennete_jours >= 2  AND anciennete_jours < 7  THEN 1 ELSE 0 END),
             SUM(CASE WHEN anciennete_jours >= 7  AND anciennete_jours < 30 THEN 1 ELSE 0 END),
-            SUM(CASE WHEN anciennete_jours >= 30 AND anciennete_jours < 90 THEN 1 ELSE 0 END),
-            SUM(CASE WHEN anciennete_jours >= 90 THEN 1 ELSE 0 END)
+            SUM(CASE WHEN anciennete_jours >= 30 THEN 1 ELSE 0 END)
          FROM tickets
          WHERE import_id = ?1 AND est_vivant = 1",
         rusqlite::params![import_id],
@@ -183,6 +184,7 @@ pub fn get_stock_overview(conn: &Connection) -> Result<StockOverview, rusqlite::
                 row.get::<_, Option<i64>>(1)?.unwrap_or(0) as usize,
                 row.get::<_, Option<i64>>(2)?.unwrap_or(0) as usize,
                 row.get::<_, Option<i64>>(3)?.unwrap_or(0) as usize,
+                row.get::<_, Option<i64>>(4)?.unwrap_or(0) as usize,
             ))
         },
     )?;
@@ -190,28 +192,34 @@ pub fn get_stock_overview(conn: &Connection) -> Result<StockOverview, rusqlite::
     let total_v = total_vivants.max(1) as f64;
     let par_anciennete = vec![
         AgeRangeCount {
-            label: "< 7j".to_string(),
+            label: "< 24h".to_string(),
             threshold_days: 0,
-            count: lt7,
-            percentage: (lt7 as f64 / total_v * 1000.0).round() / 10.0,
+            count: lt1,
+            percentage: (lt1 as f64 / total_v * 1000.0).round() / 10.0,
         },
         AgeRangeCount {
-            label: "7-30j".to_string(),
+            label: "24h - 48h".to_string(),
+            threshold_days: 1,
+            count: range1_2,
+            percentage: (range1_2 as f64 / total_v * 1000.0).round() / 10.0,
+        },
+        AgeRangeCount {
+            label: "48h - 7j".to_string(),
+            threshold_days: 2,
+            count: range2_7,
+            percentage: (range2_7 as f64 / total_v * 1000.0).round() / 10.0,
+        },
+        AgeRangeCount {
+            label: "7j - 30j".to_string(),
             threshold_days: 7,
             count: range7_30,
             percentage: (range7_30 as f64 / total_v * 1000.0).round() / 10.0,
         },
         AgeRangeCount {
-            label: "30-90j".to_string(),
+            label: "> 30j".to_string(),
             threshold_days: 30,
-            count: range30_90,
-            percentage: (range30_90 as f64 / total_v * 1000.0).round() / 10.0,
-        },
-        AgeRangeCount {
-            label: "> 90j".to_string(),
-            threshold_days: 90,
-            count: ge90,
-            percentage: (ge90 as f64 / total_v * 1000.0).round() / 10.0,
+            count: ge30,
+            percentage: (ge30 as f64 / total_v * 1000.0).round() / 10.0,
         },
     ];
 
@@ -696,7 +704,7 @@ pub fn get_technician_history(
 ) -> Result<TechHistory, rusqlite::Error> {
     let import_id = get_active_import_id(conn)?;
     let pe_ouv = periode_expr(granularity, "date_ouverture");
-    let pe_mod = periode_expr(granularity, "derniere_modification");
+    let pe_reso = periode_expr(granularity, "date_resolution");
 
     // 1. Entrants par période (tous les tickets assignés, par date d'ouverture)
     let mut entrants_map = std::collections::BTreeMap::<String, usize>::new();
@@ -717,15 +725,15 @@ pub fn get_technician_history(
         }
     }
 
-    // 2. Sortants par période (résolus/clos, par dernière modification)
+    // 2. Sortants par période (résolus/clos, par date de résolution)
     let mut sortants_map = std::collections::BTreeMap::<String, usize>::new();
     {
         let sql = format!(
-            "SELECT {pe_mod} AS p, COUNT(*)
+            "SELECT {pe_reso} AS p, COUNT(*)
              FROM tickets
              WHERE import_id = ?1 AND technicien_principal = ?2
                AND statut IN ('Résolu', 'Clos')
-               AND derniere_modification IS NOT NULL
+               AND date_resolution IS NOT NULL
              GROUP BY p ORDER BY p"
         );
         let mut stmt = conn.prepare(&sql)?;
@@ -742,12 +750,12 @@ pub fn get_technician_history(
     let mut mttr_map = std::collections::BTreeMap::<String, f64>::new();
     {
         let sql = format!(
-            "SELECT {pe_mod} AS p,
-                    AVG(julianday(derniere_modification) - julianday(date_ouverture))
+            "SELECT {pe_reso} AS p,
+                    AVG(julianday(date_resolution) - julianday(date_ouverture))
              FROM tickets
              WHERE import_id = ?1 AND technicien_principal = ?2
                AND statut IN ('Résolu', 'Clos')
-               AND derniere_modification IS NOT NULL
+               AND date_resolution IS NOT NULL
                AND date_ouverture IS NOT NULL
              GROUP BY p ORDER BY p"
         );
@@ -1010,7 +1018,7 @@ pub fn get_bilan_entrees_par_periode(
 }
 
 /// Flux sortants : tickets terminés (statut IN ('Résolu','Clos')) dont
-/// `derniere_modification` est dans [date_from, date_to], groupés par période.
+/// `date_resolution` est dans [date_from, date_to], groupés par période.
 pub fn get_bilan_sorties_par_periode(
     conn: &Connection,
     date_from: &str,
@@ -1019,15 +1027,15 @@ pub fn get_bilan_sorties_par_periode(
     filters: Option<&StockFilters>,
 ) -> Result<Vec<(String, usize)>, rusqlite::Error> {
     let import_id = get_active_import_id(conn)?;
-    let periode = periode_expr(granularity, "derniere_modification");
+    let periode = periode_expr(granularity, "date_resolution");
 
     let mut sql = format!(
         "SELECT {periode} AS periode, COUNT(*) AS n \
          FROM tickets \
          WHERE import_id = ?1 \
            AND statut IN ('Résolu', 'Clos') \
-           AND derniere_modification >= ?2 \
-           AND derniere_modification < date(?3, '+1 day')"
+           AND date_resolution >= ?2 \
+           AND date_resolution < date(?3, '+1 day')"
     );
 
     let mut params: Vec<Value> = vec![
@@ -1050,6 +1058,33 @@ pub fn get_bilan_sorties_par_periode(
     Ok(rows)
 }
 
+/// Durées de résolution (en jours) des tickets clos sur une plage de dates.
+pub fn get_resolution_durations(
+    conn: &Connection,
+    date_from: &str,
+    date_to: &str,
+) -> Result<Vec<f64>, rusqlite::Error> {
+    let import_id = get_active_import_id(conn)?;
+    let mut stmt = conn.prepare_cached(
+        "SELECT julianday(date_cloture_approx) - julianday(date_ouverture)
+         FROM tickets
+         WHERE import_id = ?1
+           AND est_vivant = 0
+           AND date_cloture_approx IS NOT NULL
+           AND date_ouverture IS NOT NULL
+           AND date_cloture_approx >= ?2
+           AND date_cloture_approx < date(?3, '+1 day')",
+    )?;
+    let rows = stmt
+        .query_map(rusqlite::params![import_id, date_from, date_to], |row| {
+            row.get::<_, f64>(0)
+        })?
+        .filter_map(|r| r.ok())
+        .filter(|v| *v >= 0.0)
+        .collect();
+    Ok(rows)
+}
+
 /// Stock à une date donnée (approximation) :
 /// COUNT tickets de l'import actif dont `date_ouverture` ≤ date ET `est_vivant` = 1.
 pub fn get_stock_at_date(conn: &Connection, date: &str) -> Result<usize, rusqlite::Error> {
@@ -1066,7 +1101,7 @@ pub fn get_stock_at_date(conn: &Connection, date: &str) -> Result<usize, rusqlit
 
 /// Ventilation par technicien sur la période : (technicien, entrants, sortants).
 /// Entrants = tickets dont `date_ouverture` dans la période.
-/// Sortants = tickets Résolu/Clos dont `derniere_modification` dans la période.
+/// Sortants = tickets Résolu/Clos dont `date_resolution` dans la période.
 pub fn get_bilan_ventilation_par_technicien(
     conn: &Connection,
     date_from: &str,
@@ -1087,8 +1122,8 @@ pub fn get_bilan_ventilation_par_technicien(
              FROM tickets \
              WHERE import_id = ?1 \
                AND statut IN ('Résolu', 'Clos') \
-               AND derniere_modification >= ?2 \
-               AND derniere_modification < date(?3, '+1 day') \
+               AND date_resolution >= ?2 \
+               AND date_resolution < date(?3, '+1 day') \
                AND technicien_principal IS NOT NULL AND technicien_principal != '' \
          ) \
          GROUP BY technicien \
@@ -1108,7 +1143,7 @@ pub fn get_bilan_ventilation_par_technicien(
 
 /// Ventilation par groupe sur la période : (groupe, entrants, sortants).
 /// Entrants = tickets dont `date_ouverture` dans la période.
-/// Sortants = tickets Résolu/Clos dont `derniere_modification` dans la période.
+/// Sortants = tickets Résolu/Clos dont `date_resolution` dans la période.
 pub fn get_bilan_ventilation_par_groupe(
     conn: &Connection,
     date_from: &str,
@@ -1129,8 +1164,8 @@ pub fn get_bilan_ventilation_par_groupe(
              FROM tickets \
              WHERE import_id = ?1 \
                AND statut IN ('Résolu', 'Clos') \
-               AND derniere_modification >= ?2 \
-               AND derniere_modification < date(?3, '+1 day') \
+               AND date_resolution >= ?2 \
+               AND date_resolution < date(?3, '+1 day') \
                AND groupe_principal IS NOT NULL AND groupe_principal != '' \
          ) \
          GROUP BY groupe \
@@ -1293,10 +1328,12 @@ mod tests {
         let (conn, _) = setup();
         let ov = get_stock_overview(&conn).unwrap();
         // Âges des vivants : 5j, 15j, 100j
-        assert_eq!(ov.par_anciennete[0].count, 1); // < 7j  → ticket 1 (5j)
-        assert_eq!(ov.par_anciennete[1].count, 1); // 7-30j → ticket 2 (15j)
-        assert_eq!(ov.par_anciennete[2].count, 0); // 30-90j → aucun
-        assert_eq!(ov.par_anciennete[3].count, 1); // > 90j → ticket 3 (100j)
+        assert_eq!(ov.par_anciennete.len(), 5);
+        assert_eq!(ov.par_anciennete[0].count, 0); // < 24h → aucun
+        assert_eq!(ov.par_anciennete[1].count, 0); // 24h-48h → aucun
+        assert_eq!(ov.par_anciennete[2].count, 1); // 48h-7j → ticket 1 (5j)
+        assert_eq!(ov.par_anciennete[3].count, 1); // 7j-30j → ticket 2 (15j)
+        assert_eq!(ov.par_anciennete[4].count, 1); // > 30j → ticket 3 (100j)
     }
 
     #[test]
@@ -1485,21 +1522,22 @@ mod tests_bilan {
     use super::*;
     use rusqlite::Connection;
 
-    /// Setup dédié aux tests bilan : tickets avec `derniere_modification` explicite,
+    /// Setup dédié aux tests bilan : tickets avec dates explicites,
     /// répartis sur plusieurs mois pour tester les agrégations temporelles.
     ///
     /// Import actif id=1, tickets :
-    /// | id | date_ouverture      | statut               | derniere_modification | tech    | groupe          | type     |
-    /// |----|---------------------|----------------------|-----------------------|---------|-----------------|----------|
-    /// | 10 | 2026-01-05T09:00:00 | Nouveau (vivant)     | 2026-01-05T09:00:00   | Dupont  | _DSI > _SUPPORT | Incident |
-    /// | 11 | 2026-01-15T08:00:00 | Clos (terminé)       | 2026-01-25T10:00:00   | Dupont  | _DSI > _SUPPORT | Incident |
-    /// | 12 | 2026-02-03T10:00:00 | En cours (vivant)    | 2026-02-03T10:00:00   | Martin  | _DSI > _INFRA   | Demande  |
-    /// | 13 | 2026-02-10T11:00:00 | Résolu (terminé)     | 2026-02-20T14:00:00   | Martin  | _DSI > _INFRA   | Incident |
-    /// | 14 | 2025-12-20T09:00:00 | Clos (terminé)       | 2026-02-01T09:00:00   | Dupont  | _DSI > _SUPPORT | Demande  |
-    /// | 15 | 2026-03-05T08:00:00 | Nouveau (vivant)     | 2026-03-05T08:00:00   | Martin  | _DSI > _INFRA   | Incident |
+    /// | id | date_ouverture      | statut               | date_resolution       | derniere_modification | tech    | groupe          | type     |
+    /// |----|---------------------|----------------------|-----------------------|-----------------------|---------|-----------------|----------|
+    /// | 10 | 2026-01-05T09:00:00 | Nouveau (vivant)     | —                     | 2026-01-05T09:00:00   | Dupont  | _DSI > _SUPPORT | Incident |
+    /// | 11 | 2026-01-15T08:00:00 | Clos (terminé)       | 2026-01-25T10:00:00   | 2026-01-28T10:00:00   | Dupont  | _DSI > _SUPPORT | Incident |
+    /// | 12 | 2026-02-03T10:00:00 | En cours (vivant)    | —                     | 2026-02-03T10:00:00   | Martin  | _DSI > _INFRA   | Demande  |
+    /// | 13 | 2026-02-10T11:00:00 | Résolu (terminé)     | 2026-02-20T14:00:00   | 2026-02-22T14:00:00   | Martin  | _DSI > _INFRA   | Incident |
+    /// | 14 | 2025-12-20T09:00:00 | Clos (terminé)       | 2026-02-01T09:00:00   | 2026-02-05T09:00:00   | Dupont  | _DSI > _SUPPORT | Demande  |
+    /// | 15 | 2026-03-05T08:00:00 | Nouveau (vivant)     | —                     | 2026-03-05T08:00:00   | Martin  | _DSI > _INFRA   | Incident |
     fn setup_bilan() -> (Connection, i64) {
         let conn = Connection::open_in_memory().unwrap();
         conn.execute_batch(include_str!("sql/001_initial.sql")).unwrap();
+        conn.execute_batch(include_str!("sql/003_date_resolution.sql")).unwrap();
 
         conn.execute(
             "INSERT INTO imports (
@@ -1513,28 +1551,29 @@ mod tests_bilan {
         .unwrap();
         let import_id = conn.last_insert_rowid();
 
-        let tickets: &[(&str, &str, &str, &str, &str, i64, &str)] = &[
-            ("Nouveau",            "2026-01-05T09:00:00", "2026-01-05T09:00:00", "Dupont", "_DSI > _SUPPORT", 1, "Incident"),
-            ("Clos",               "2026-01-15T08:00:00", "2026-01-25T10:00:00", "Dupont", "_DSI > _SUPPORT", 0, "Incident"),
-            ("En cours (Attribué)","2026-02-03T10:00:00", "2026-02-03T10:00:00", "Martin", "_DSI > _INFRA",   1, "Demande"),
-            ("Résolu",             "2026-02-10T11:00:00", "2026-02-20T14:00:00", "Martin", "_DSI > _INFRA",   0, "Incident"),
-            ("Clos",               "2025-12-20T09:00:00", "2026-02-01T09:00:00", "Dupont", "_DSI > _SUPPORT", 0, "Demande"),
-            ("Nouveau",            "2026-03-05T08:00:00", "2026-03-05T08:00:00", "Martin", "_DSI > _INFRA",   1, "Incident"),
+        // (statut, date_ouv, date_reso, date_mod, tech, groupe, vivant, type_t)
+        let tickets: &[(&str, &str, Option<&str>, &str, &str, &str, i64, &str)] = &[
+            ("Nouveau",            "2026-01-05T09:00:00", None,                          "2026-01-05T09:00:00", "Dupont", "_DSI > _SUPPORT", 1, "Incident"),
+            ("Clos",               "2026-01-15T08:00:00", Some("2026-01-25T10:00:00"),   "2026-01-28T10:00:00", "Dupont", "_DSI > _SUPPORT", 0, "Incident"),
+            ("En cours (Attribué)","2026-02-03T10:00:00", None,                          "2026-02-03T10:00:00", "Martin", "_DSI > _INFRA",   1, "Demande"),
+            ("Résolu",             "2026-02-10T11:00:00", Some("2026-02-20T14:00:00"),   "2026-02-22T14:00:00", "Martin", "_DSI > _INFRA",   0, "Incident"),
+            ("Clos",               "2025-12-20T09:00:00", Some("2026-02-01T09:00:00"),   "2026-02-05T09:00:00", "Dupont", "_DSI > _SUPPORT", 0, "Demande"),
+            ("Nouveau",            "2026-03-05T08:00:00", None,                          "2026-03-05T08:00:00", "Martin", "_DSI > _INFRA",   1, "Incident"),
         ];
 
-        for (i, (statut, date_ouv, date_mod, tech, groupe, vivant, type_t)) in
+        for (i, (statut, date_ouv, date_reso, date_mod, tech, groupe, vivant, type_t)) in
             tickets.iter().enumerate()
         {
             let ticket_id = (i + 10) as i64;
             conn.execute(
                 "INSERT INTO tickets (
                     id, import_id, titre, statut, type_ticket, demandeur,
-                    date_ouverture, derniere_modification, est_vivant,
+                    date_ouverture, date_resolution, derniere_modification, est_vivant,
                     technicien_principal, groupe_principal, groupe_niveau1,
                     anciennete_jours, inactivite_jours, nombre_suivis
-                 ) VALUES (?1, ?2, 'T', ?3, ?4, 'u', ?5, ?6, ?7, ?8, ?9, '_DSI', 10, 0, 0)",
-                rusqlite::params![ticket_id, import_id, statut, type_t, date_ouv, date_mod,
-                                  vivant, tech, groupe],
+                 ) VALUES (?1, ?2, 'T', ?3, ?4, 'u', ?5, ?6, ?7, ?8, ?9, ?10, '_DSI', 10, 0, 0)",
+                rusqlite::params![ticket_id, import_id, statut, type_t, date_ouv, date_reso,
+                                  date_mod, vivant, tech, groupe],
             )
             .unwrap();
         }
@@ -1635,9 +1674,9 @@ mod tests_bilan {
     #[test]
     fn test_sorties_mois_periode_complete() {
         // Période : jan + fev 2026
-        // Sorties : T11 (Clos, derniere_mod=2026-01-25) → jan
-        //           T13 (Résolu, derniere_mod=2026-02-20) → fev
-        //           T14 (Clos, derniere_mod=2026-02-01) → fev
+        // Sorties : T11 (Clos, date_resolution=2026-01-25) → jan
+        //           T13 (Résolu, date_resolution=2026-02-20) → fev
+        //           T14 (Clos, date_resolution=2026-02-01) → fev
         let (conn, _) = setup_bilan();
         let rows = get_bilan_sorties_par_periode(&conn, "2026-01-01", "2026-02-28", "month", None)
             .unwrap();
@@ -1650,8 +1689,8 @@ mod tests_bilan {
 
     #[test]
     fn test_sorties_seul_janvier() {
-        // Seul janvier → 1 sortant (T11, 2026-01-25)
-        // T14 a derniere_mod en fev → exclu, T13 en fev → exclu
+        // Seul janvier → 1 sortant (T11, date_resolution=2026-01-25)
+        // T14 a date_resolution en fev → exclu, T13 en fev → exclu
         let (conn, _) = setup_bilan();
         let rows = get_bilan_sorties_par_periode(&conn, "2026-01-01", "2026-01-31", "month", None)
             .unwrap();
@@ -1673,7 +1712,7 @@ mod tests_bilan {
 
     #[test]
     fn test_sorties_periode_sans_sortant_retourne_rien() {
-        // Aucun ticket clos avant le 20 jan
+        // Aucun ticket résolu avant le 20 jan
         let (conn, _) = setup_bilan();
         let rows = get_bilan_sorties_par_periode(&conn, "2026-01-01", "2026-01-19", "month", None)
             .unwrap();

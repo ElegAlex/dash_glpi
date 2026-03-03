@@ -7,7 +7,8 @@ import { useFilterStore } from '../stores/filterStore';
 import { KpiCards } from '../components/stock/KpiCards';
 import { TechnicianTable } from '../components/stock/TechnicianTable';
 import { Card } from '../components/shared/Card';
-import type { StockOverview, TechnicianStats, CategoryTree, CategoryNode, TicketSummary } from '../types/kpi';
+import type { StockOverview, TechnicianStats, CategoryTree, CategoryNode, TicketSummary, AgeRangeCount } from '../types/kpi';
+import type { EChartsCoreOption } from 'echarts/core';
 import '../lib/echarts-theme';
 
 const PALETTE = ['#1565C0', '#2E7D32', '#FF8F00', '#6A1B9A', '#00838F', '#C62828', '#4E342E', '#37474F'];
@@ -112,6 +113,65 @@ function CategoryBarChart({ tree }: { tree: CategoryTree }) {
       <div ref={chartRef} style={{ height: Math.max(220, barCount * 32), width: '100%' }} />
     </div>
   );
+}
+
+/* ── Distribution de l'âge des tickets ── */
+const AGE_COLORS = ['#2E7D32', '#1565C0', '#FF8F00', '#6A1B9A', '#C62828'];
+
+function AgeDistributionChart({ data }: { data: AgeRangeCount[] }) {
+  const option = useMemo<EChartsCoreOption>(() => {
+    const labels = data.map((d) => d.label);
+    const counts = data.map((d) => d.count);
+
+    return {
+      tooltip: {
+        trigger: 'axis' as const,
+        axisPointer: { type: 'shadow' as const },
+        formatter: (params: unknown) => {
+          const p = (params as Array<{ name: string; value: number; dataIndex: number }>)[0];
+          if (!p) return '';
+          const tranche = data[p.dataIndex];
+          return `<div style="font-size:13px;color:#1E293B">
+            <strong>${p.name}</strong><br/>
+            ${p.value.toLocaleString('fr-FR')} ticket(s)
+            ${tranche ? ` (${tranche.percentage}%)` : ''}
+          </div>`;
+        },
+      },
+      grid: { left: 100, right: 60, top: 10, bottom: 20 },
+      xAxis: { type: 'value' as const },
+      yAxis: {
+        type: 'category' as const,
+        data: labels,
+        inverse: true,
+        axisLabel: { fontSize: 12, fontFamily: 'DM Sans' },
+      },
+      series: [
+        {
+          type: 'bar' as const,
+          data: counts.map((val, idx) => ({
+            value: val,
+            itemStyle: { color: AGE_COLORS[idx % AGE_COLORS.length], borderRadius: [0, 6, 6, 0] },
+          })),
+          barWidth: '55%',
+          label: {
+            show: true,
+            position: 'right' as const,
+            fontSize: 11,
+            color: '#64748B',
+            formatter: (params: { value: number; dataIndex: number }) => {
+              const t = data[params.dataIndex];
+              return `${params.value.toLocaleString('fr-FR')} (${t.percentage}%)`;
+            },
+          },
+        },
+      ],
+    };
+  }, [data]);
+
+  const { chartRef } = useECharts(option, undefined, 'cpam-material');
+
+  return <div ref={chartRef} className="h-[220px] w-full" />;
 }
 
 /* ── Drawer tickets non assignés ── */
@@ -286,6 +346,23 @@ function StockPage() {
             />
           )}
         </div>
+
+        {/* Age distribution */}
+        {overviewHook.data && overviewHook.data.parAnciennete.length > 0 && (
+          <div className="animate-fade-slide-up animation-delay-150">
+            <Card>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold font-[DM_Sans] text-slate-700">
+                  Distribution de l'age des tickets
+                </h3>
+                <span className="text-xs text-slate-400">
+                  {overviewHook.data.totalVivants.toLocaleString('fr-FR')} tickets vivants
+                </span>
+              </div>
+              <AgeDistributionChart data={overviewHook.data.parAnciennete} />
+            </Card>
+          </div>
+        )}
 
         {/* Filter bar */}
         <div className="animate-fade-slide-up animation-delay-150">

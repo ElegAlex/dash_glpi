@@ -8,7 +8,7 @@ interface KpiCardsProps {
 }
 
 export function KpiCards({ overview, onUnassignedClick }: KpiCardsProps) {
-  const over90 = overview.parAnciennete.find((r) => r.thresholdDays === 90)?.count ?? 0;
+  const over30 = overview.parAnciennete.find((r) => r.thresholdDays === 30)?.count ?? 0;
 
   return (
     <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-5">
@@ -39,8 +39,8 @@ export function KpiCards({ overview, onUnassignedClick }: KpiCardsProps) {
         accentColor="#FF8F00"
       />
       <KpiCard
-        label="Tickets > 90 j"
-        value={over90}
+        label="Tickets > 30 j"
+        value={over30}
         icon={<AlertTriangle size={18} className="text-red-600" />}
         accentColor="#C62828"
       />

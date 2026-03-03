@@ -34,7 +34,7 @@ export function KpiCards({ kpi, granularity = 'month' }: KpiCardsProps) {
       />
       <KpiCard
         label="Taux N1"
-        value={Number(kpi.tauxN1.n1Elargi.pourcentage.toFixed(1))}
+        value={Number(kpi.tauxN1.n1Strict.pourcentage.toFixed(1))}
         format="percent"
         icon={<UserCheck size={18} color="#2E7D32" />}
         accentColor="#2E7D32"

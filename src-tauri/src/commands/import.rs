@@ -156,7 +156,7 @@ pub async fn import_csv(
 
     // Parse CSV — progress callback sends ImportEvent::Progress every 500 rows
     let on_prog = on_progress.clone();
-    let parse_output = crate::parser::parse_csv(&path, move |rows_parsed, _accepted| {
+    let parse_output = crate::parser::parse_file(&path, move |rows_parsed, _accepted| {
         let _ = on_prog.send(ImportEvent::Progress {
             rows_parsed,
             total_estimated: 0,

@@ -102,6 +102,7 @@ mod tests {
             categorie: None,
             categorie_niveau1: None,
             categorie_niveau2: None,
+            date_resolution: None,
             est_vivant: true,
             anciennete_jours: Some(5),
             inactivite_jours: Some(3),

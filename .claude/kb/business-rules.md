@@ -151,7 +151,8 @@ Champ DB `couleur_seuil` : `"vert"`, `"jaune"`, `"orange"`, `"rouge"`
 
 **RG-014 : Ancienneté**
 - Ticket vivant : `now - date_ouverture` en jours
-- Ticket terminé : `derniere_modification - date_ouverture` en jours
+- Ticket terminé : `date_resolution - date_ouverture` en jours (via `date_cloture_approx`)
+- `date_cloture_approx` = `date_resolution` si terminé, NULL sinon
 - Implémentation : `chrono::Utc::now().naive_utc()`
 - Format date ISO 8601 : `%Y-%m-%dT%H:%M:%S`
 

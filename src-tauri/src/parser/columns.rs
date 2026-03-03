@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::error::AppError;
 
 /// Colonnes obligatoires — l'import échoue si l'une d'elles est absente.
-const REQUIRED: &[&str] = &["ID", "Titre", "Statut", "Date d'ouverture", "Type"];
+const REQUIRED: &[&str] = &["ID", "Titre", "Statut", "Date d'ouverture", "Date de résolution", "Type"];
 
 /// Colonnes optionnelles — absentes = valeur par défaut, signalées dans le résultat.
 const OPTIONAL: &[&str] = &["Catégorie"];
@@ -39,6 +39,29 @@ impl ColumnMap {
     /// Returns true if the column is present in the CSV headers.
     pub fn has(&self, col: &str) -> bool {
         self.indices.contains_key(col)
+    }
+
+    /// Build a ColumnMap from a slice of header strings (for XLSX/generic use).
+    pub fn from_header_strings(headers: &[String]) -> Self {
+        let mut indices = HashMap::new();
+        let mut header_list = Vec::new();
+        for (i, name) in headers.iter().enumerate() {
+            let trimmed = name.trim().to_string();
+            indices.insert(trimmed.clone(), i);
+            header_list.push(trimmed);
+        }
+        ColumnMap {
+            indices,
+            headers: header_list,
+        }
+    }
+
+    /// Get the value of a named column from a string slice row (for XLSX/generic use).
+    pub fn get_from_slice<'a>(&self, row: &'a [String], col: &str) -> Option<&'a str> {
+        self.indices
+            .get(col)
+            .and_then(|&i| row.get(i))
+            .map(|s| s.as_str())
     }
 
     /// All header names in order.
@@ -115,6 +138,7 @@ mod tests {
             "Titre",
             "Statut",
             "Date d'ouverture",
+            "Date de résolution",
             "Type",
             "Catégorie",
         ]);
@@ -140,7 +164,7 @@ mod tests {
 
     #[test]
     fn test_validate_columns_missing_optional() {
-        let headers = make_headers(&["ID", "Titre", "Statut", "Date d'ouverture", "Type"]);
+        let headers = make_headers(&["ID", "Titre", "Statut", "Date d'ouverture", "Date de résolution", "Type"]);
         let cm = ColumnMap::from_headers(&headers);
         let val = validate_columns(&cm).unwrap();
         assert!(val.missing_optional.contains(&"Catégorie".to_string()));

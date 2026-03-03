@@ -24,6 +24,7 @@ Colonne CSV française → GlpiTicketRaw (Serde) → GlpiTicketNormalized → Co
 | `Urgence` | `urgence: Option<u8>` | `de::opt_u8_empty` | `urgence: Option<u8>` | `urgence INTEGER` |
 | `Demandeur - Demandeur` | `demandeur: String` | (défaut) | `demandeur: String` | `demandeur TEXT` |
 | `Date d'ouverture` | `date_ouverture: NaiveDateTime` | `de::french_datetime` | `date_ouverture: String` (ISO 8601) | `date_ouverture TEXT` |
+| `Date de résolution` | `date_resolution: Option<String>` | `parse_french_datetime` | `date_resolution: Option<String>` (ISO 8601) | `date_resolution TEXT` |
 | `Dernière modification` | `derniere_modification: Option<NaiveDateTime>` | `de::french_datetime_opt` | `derniere_modification: Option<String>` | `derniere_modification TEXT` |
 | `Suivis - Nombre de suivis` | `nombre_suivis: Option<u32>` | `de::opt_u32_empty` | `nombre_suivis: Option<u32>` | `nombre_suivis INTEGER` |
 | `Suivis - Description` | `suivis_description: String` | (défaut) | `suivis_description: String` | `suivis_description TEXT` |
@@ -48,7 +49,7 @@ Colonne CSV française → GlpiTicketRaw (Serde) → GlpiTicketNormalized → Co
 | — | split(groupe_principal, " > ")[1] | `groupe_niveau2 TEXT` |
 | — | split(groupe_principal, " > ")[2] | `groupe_niveau3 TEXT` |
 | — | statut in VIVANTS | `est_vivant INTEGER` (0/1) |
-| — | derniere_modification si terminé | `date_cloture_approx TEXT` |
+| — | date_resolution si terminé | `date_cloture_approx TEXT` |
 
 ---
 
@@ -79,7 +80,7 @@ fn opt_u8_empty<'de, D>(d: D) -> Result<Option<u8>, D::Error>
 
 ```rust
 const REQUIRED: &[&str] = &[
-    "ID", "Titre", "Statut", "Date d'ouverture", "Type",
+    "ID", "Titre", "Statut", "Date d'ouverture", "Date de résolution", "Type",
 ];
 
 const OPTIONAL: &[&str] = &[

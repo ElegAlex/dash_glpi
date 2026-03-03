@@ -74,6 +74,7 @@ pub fn compute_bilan(
             moyenne_sorties_par_periode,
         },
         ventilation: None,
+        resolution: None,
     }
 }
 
