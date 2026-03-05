@@ -3,10 +3,30 @@ use std::collections::HashMap;
 use crate::error::AppError;
 
 /// Colonnes obligatoires — l'import échoue si l'une d'elles est absente.
-const REQUIRED: &[&str] = &["ID", "Titre", "Statut", "Date d'ouverture", "Date de résolution", "Type"];
+const REQUIRED: &[&str] = &[
+    "ID",
+    "Titre",
+    "Statut",
+    "Date d'ouverture",
+    "Date de résolution",
+    "Type",
+    "Catégorie",
+    "Attribué à - Technicien",
+    "Suivis - Description",
+    "Solution - Solution",
+];
 
 /// Colonnes optionnelles — absentes = valeur par défaut, signalées dans le résultat.
-const OPTIONAL: &[&str] = &["Catégorie"];
+const OPTIONAL: &[&str] = &[
+    "Priorité",
+    "Urgence",
+    "Demandeur - Demandeur",
+    "Dernière modification",
+    "Suivis - Nombre de suivis",
+    "Tâches - Description",
+    "Plugins - Intervention fourniseur : Intervention",
+    "Attribué à - Groupe de techniciens",
+];
 
 /// Maps column names to their index in a CSV record.
 pub struct ColumnMap {
@@ -141,6 +161,17 @@ mod tests {
             "Date de résolution",
             "Type",
             "Catégorie",
+            "Priorité",
+            "Urgence",
+            "Demandeur - Demandeur",
+            "Dernière modification",
+            "Suivis - Nombre de suivis",
+            "Suivis - Description",
+            "Solution - Solution",
+            "Tâches - Description",
+            "Plugins - Intervention fourniseur : Intervention",
+            "Attribué à - Technicien",
+            "Attribué à - Groupe de techniciens",
         ]);
         let cm = ColumnMap::from_headers(&headers);
         let val = validate_columns(&cm).unwrap();
@@ -163,11 +194,17 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_columns_missing_optional() {
+    fn test_validate_columns_missing_categorie() {
+        // Catégorie est désormais requise
         let headers = make_headers(&["ID", "Titre", "Statut", "Date d'ouverture", "Date de résolution", "Type"]);
         let cm = ColumnMap::from_headers(&headers);
-        let val = validate_columns(&cm).unwrap();
-        assert!(val.missing_optional.contains(&"Catégorie".to_string()));
+        let err = validate_columns(&cm).unwrap_err();
+        match err {
+            AppError::MissingColumns(cols) => {
+                assert!(cols.contains(&"Catégorie".to_string()));
+            }
+            _ => panic!("Expected MissingColumns error"),
+        }
     }
 
     #[test]

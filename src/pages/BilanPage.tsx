@@ -49,7 +49,7 @@ function ResolutionChart({ resolution }: { resolution: BilanResolution }) {
         type: 'category' as const,
         data: labels,
         inverse: true,
-        axisLabel: { fontSize: 12, fontFamily: 'DM Sans' },
+        axisLabel: { fontFamily: 'DM Sans' },
       },
       series: [
         {

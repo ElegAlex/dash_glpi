@@ -50,7 +50,7 @@ export function BilanChart({ periodes }: BilanChartProps) {
       xAxis: {
         type: 'category',
         data: labels,
-        axisLabel: { rotate: labels.length > 12 ? 35 : 0, fontSize: 11 },
+        axisLabel: { rotate: labels.length > 12 ? 35 : 0 },
       },
       yAxis: [
         {

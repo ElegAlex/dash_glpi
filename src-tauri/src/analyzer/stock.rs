@@ -119,7 +119,6 @@ mod tests {
             seuil_similarite_doublons: 0.92,
             statuts_vivants: vec![],
             statuts_termines: vec![],
-            taille_police_axes: 11,
         }
     }
 

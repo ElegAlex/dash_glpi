@@ -43,7 +43,7 @@ export function MttrTrendChart({ data }: MttrTrendChartProps) {
       xAxis: {
         type: 'category' as const,
         data: labels,
-        axisLabel: { fontSize: 11 },
+        axisLabel: {},
       },
       yAxis: {
         type: 'value' as const,

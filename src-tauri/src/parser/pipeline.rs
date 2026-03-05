@@ -573,7 +573,7 @@ mod tests {
         "Attribué à - Technicien;Demandeur - Demandeur;Date d'ouverture;",
         "Type;Suivis - Description;Suivis - Nombre de suivis;",
         "Plugins - Intervention fourniseur : Intervention;Solution - Solution;",
-        "Priorité;Tâches - Description;Urgence;Date de résolution;Dernière modification"
+        "Priorité;Tâches - Description;Urgence;Date de résolution;Dernière modification;Catégorie"
     );
 
     fn parse(csv: &str) -> ParseOutput {
@@ -635,18 +635,13 @@ mod tests {
         assert_eq!(t.groupe_principal, Some("_DSI > _SUPPORT".into()));
     }
 
-    // ── US002 / RG-007 : optional Catégorie column absent ────────────────────
+    // ── Catégorie is now required ─────────────────────────────────────────────
 
     #[test]
-    fn test_categorie_column_absent() {
-        let csv = format!("{HDR}\n1;T;G;Nouveau;T;D;01-01-2026 08:00;Inc;;0;;;;3;;4;;");
+    fn test_categorie_present() {
+        let csv = format!("{HDR}\n1;T;G;Nouveau;T;D;01-01-2026 08:00;Inc;;0;;;;3;;4;;MaCat");
         let out = parse(&csv);
-        assert!(out.tickets[0].categorie.is_none());
-        assert!(
-            out.missing_optional_columns
-                .contains(&"Catégorie".to_string()),
-            "Catégorie doit figurer dans missing_optional_columns"
-        );
+        assert_eq!(out.tickets[0].categorie.as_deref(), Some("MaCat"));
     }
 
     // ── US002 / RG-006 : empty numeric fields → None ─────────────────────────

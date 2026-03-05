@@ -218,6 +218,44 @@ function ImportContent() {
                 Fichier importe avec succes. Cliquez a nouveau pour importer un nouveau fichier.
               </p>
             )}
+
+            <div className="rounded-xl bg-slate-50 px-4 py-3 space-y-2.5">
+              <div>
+                <p className="text-xs font-semibold text-slate-500 mb-1.5">Colonnes requises</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {['ID', 'Titre', 'Statut', "Date d'ouverture", 'Date de resolution', 'Type', 'Categorie', 'Attribue a - Technicien', 'Suivis - Description', 'Solution - Solution'].map((col) => (
+                    <span key={col} className="px-2 py-0.5 rounded-md bg-white text-xs font-medium text-slate-600 shadow-[0_1px_2px_rgba(0,0,0,0.06)]">
+                      {col}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-slate-500 mb-1.5">Colonnes optionnelles</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    'Priorite', 'Urgence', 'Demandeur - Demandeur', 'Derniere modification',
+                    'Suivis - Nombre de suivis',
+                    'Taches - Description', 'Plugins - Intervention fourniseur : Intervention',
+                    'Attribue a - Groupe de techniciens',
+                  ].map((col) => (
+                    <span key={col} className="px-2 py-0.5 rounded-md bg-white text-xs font-medium text-slate-400 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+                      {col}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-slate-500 mb-1.5">Formats acceptes</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {['CSV (Latin-1 ou UTF-8)', 'XLSX'].map((fmt) => (
+                    <span key={fmt} className="px-2 py-0.5 rounded-md bg-white text-xs font-medium text-slate-600 shadow-[0_1px_2px_rgba(0,0,0,0.06)]">
+                      {fmt}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
         </Card>
       </div>

@@ -1,6 +1,5 @@
 import { create } from "zustand";
 import type { AppConfig } from "../types/config";
-import { registerThemeWithFontSize } from "../lib/echarts-theme";
 
 interface SettingsState {
   config: AppConfig | null;
@@ -9,8 +8,5 @@ interface SettingsState {
 
 export const useSettingsStore = create<SettingsState>((set) => ({
   config: null,
-  setConfig: (config) => {
-    registerThemeWithFontSize(config.taillePoliceAxes ?? 11);
-    set({ config });
-  },
+  setConfig: (config) => set({ config }),
 }));

@@ -41,7 +41,7 @@ function CategoryBarChart({ tree }: { tree: CategoryTree }) {
         type: 'category' as const,
         data: labels,
         inverse: true,
-        axisLabel: { fontSize: 11, width: 180, overflow: 'truncate' as const },
+        axisLabel: { width: 180, overflow: 'truncate' as const },
       },
       series: [
         {
@@ -144,7 +144,7 @@ function AgeDistributionChart({ data }: { data: AgeRangeCount[] }) {
         type: 'category' as const,
         data: labels,
         inverse: true,
-        axisLabel: { fontSize: 12, fontFamily: 'DM Sans' },
+        axisLabel: { fontFamily: 'DM Sans' },
       },
       series: [
         {

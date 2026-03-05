@@ -30,7 +30,7 @@ function HorizontalBarChart({ data, title }: { data: { label: string; count: num
         type: 'category' as const,
         data: top10.map((d) => d.label),
         inverse: true,
-        axisLabel: { fontSize: 11, width: 115, overflow: 'truncate' as const },
+        axisLabel: { width: 115, overflow: 'truncate' as const },
       },
       series: [{
         type: 'bar' as const,
@@ -67,7 +67,7 @@ function EvolutionLineChart({ data }: { data: { periode: string; count: number }
     xAxis: {
       type: 'category' as const,
       data: data.map((d) => d.periode),
-      axisLabel: { fontSize: 10, rotate: data.length > 8 ? 45 : 0 },
+      axisLabel: { rotate: data.length > 8 ? 45 : 0 },
     },
     yAxis: {
       type: 'value' as const,

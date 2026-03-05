@@ -42,7 +42,7 @@ export function DistributionDelaisChart({ data }: DistributionDelaisChartProps) 
         type: 'category' as const,
         data: labels,
         inverse: true,
-        axisLabel: { fontSize: 11 },
+        axisLabel: {},
       },
       series: [
         {

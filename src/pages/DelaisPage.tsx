@@ -52,7 +52,7 @@ function TrendChart({ data }: { data: DelaisKpi }) {
       xAxis: {
         type: 'category' as const,
         data: labels,
-        axisLabel: { rotate: labels.length > 12 ? 35 : 0, fontSize: 11 },
+        axisLabel: { rotate: labels.length > 12 ? 35 : 0 },
       },
       yAxis: {
         type: 'value' as const,
@@ -143,7 +143,7 @@ function DistributionChart({ tranches }: { tranches: TrancheDelai[] }) {
         type: 'category' as const,
         data: labels,
         inverse: true,
-        axisLabel: { fontSize: 12, fontFamily: 'DM Sans' },
+        axisLabel: { fontFamily: 'DM Sans' },
       },
       series: [
         {

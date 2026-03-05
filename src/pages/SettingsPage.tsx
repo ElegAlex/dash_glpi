@@ -321,21 +321,7 @@ function SettingsPage() {
         </SettingsCard>
         </div>
 
-        {/* Section 4 — Graphiques */}
-        <div className="animate-fade-slide-up animation-delay-450">
-        <SettingsCard title="Graphiques">
-          <div className="space-y-4">
-            <NumberField
-              label="Taille de police des axes"
-              value={form.taillePoliceAxes}
-              onChange={(v) => set("taillePoliceAxes", Math.max(8, Math.min(18, v)))}
-              help="Taille en pixels des labels des abscisses et ordonnees (defaut : 11)"
-            />
-          </div>
-        </SettingsCard>
-        </div>
-
-        {/* Section 5 — Statuts */}
+        {/* Section 4 — Statuts */}
         <div className="animate-fade-slide-up animation-delay-450">
         <SettingsCard title="Statuts">
           <div className="space-y-6">

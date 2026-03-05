@@ -44,7 +44,7 @@ export function TauxN1TrendChart({ data, objectifItil }: TauxN1TrendChartProps) 
       xAxis: {
         type: 'category' as const,
         data: labels,
-        axisLabel: { fontSize: 11 },
+        axisLabel: {},
       },
       yAxis: {
         type: 'value' as const,

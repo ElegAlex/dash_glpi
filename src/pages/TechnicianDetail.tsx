@@ -74,7 +74,7 @@ function HistoriqueCharts({ periodes }: { periodes: TechHistoryPeriod[] }) {
       tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
       legend: { data: ['Entrants', 'Sortants', 'Stock cumule'], bottom: 0 },
       grid: { left: 55, right: 55, top: 30, bottom: 50 },
-      xAxis: { type: 'category', data: keys, axisLabel: { fontSize: 11 } },
+      xAxis: { type: 'category', data: keys, axisLabel: {} },
       yAxis: [
         { type: 'value', name: 'Volume', position: 'left' },
         { type: 'value', name: 'Stock', position: 'right' },
@@ -131,7 +131,7 @@ function HistoriqueCharts({ periodes }: { periodes: TechHistoryPeriod[] }) {
         },
       },
       grid: { left: 55, right: 20, top: 30, bottom: 30 },
-      xAxis: { type: 'category', data: withMttr.map((p) => p.periodKey), axisLabel: { fontSize: 11 } },
+      xAxis: { type: 'category', data: withMttr.map((p) => p.periodKey), axisLabel: {} },
       yAxis: { type: 'value', name: 'Jours' },
       series: [
         {

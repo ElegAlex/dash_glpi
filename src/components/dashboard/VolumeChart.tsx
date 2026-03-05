@@ -44,7 +44,7 @@ export function VolumeChart({ data }: VolumeChartProps) {
       xAxis: {
         type: 'category' as const,
         data: labels,
-        axisLabel: { rotate: labels.length > 12 ? 35 : 0, fontSize: 11 },
+        axisLabel: { rotate: labels.length > 12 ? 35 : 0 },
       },
       yAxis: {
         type: 'value' as const,
