@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo, useState } from 'react';
+import { useEffect, useRef, useMemo, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import {
   useReactTable,
@@ -10,23 +10,24 @@ import {
 } from '@tanstack/react-table';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { save } from '@tauri-apps/plugin-dialog';
+import { subDays } from 'date-fns';
 import { invoke } from '@tauri-apps/api/core';
 import { useInvoke } from '../hooks/useInvoke';
 import { useECharts } from '../hooks/useECharts';
+import { CompactFilterBar } from '../components/shared/CompactFilterBar';
+import type { DateRange, Granularity } from '../components/shared/DateRangePicker';
 import type { GLPITicket } from '../types/tickets';
 import type { ExportResult, TechHistory, TechHistoryPeriod } from '../types/config';
 import { KpiCard } from '../components/shared/KpiCard';
 import { ArrowDownToLine, ArrowUpFromLine, Clock, Package } from 'lucide-react';
 import type { EChartsCoreOption } from 'echarts/core';
 
-type Granularity = 'day' | 'week' | 'month' | 'quarter' | 'year';
-const GRAN_OPTIONS: { value: Granularity; label: string }[] = [
-  { value: 'day', label: 'Jour' },
-  { value: 'week', label: 'Semaine' },
-  { value: 'month', label: 'Mois' },
-  { value: 'quarter', label: 'Trimestre' },
-  { value: 'year', label: 'Annee' },
-];
+function formatDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
 
 const columnHelper = createColumnHelper<GLPITicket>();
 
@@ -180,12 +181,41 @@ function HistoriqueCharts({ periodes }: { periodes: TechHistoryPeriod[] }) {
 }
 
 function HistoriqueTab({ technicien }: { technicien: string }) {
+  const today = new Date();
   const { data, loading, error, execute } = useInvoke<TechHistory>();
+  const [range, setRange] = useState<DateRange>({ from: subDays(today, 365), to: today });
   const [granularity, setGranularity] = useState<Granularity>('month');
+  const initialized = useRef(false);
+
+  const load = useCallback(
+    (r: DateRange, g: Granularity) => {
+      execute('get_technician_history', {
+        technicien,
+        granularity: g,
+        dateFrom: formatDate(r.from),
+        dateTo: formatDate(r.to),
+      });
+    },
+    [execute, technicien],
+  );
 
   useEffect(() => {
-    execute('get_technician_history', { technicien, granularity });
-  }, [technicien, granularity]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!initialized.current) {
+      initialized.current = true;
+      load(range, granularity);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleRangeChange = (r: DateRange, g: Granularity) => {
+    setRange(r);
+    setGranularity(g);
+    load(r, g);
+  };
+
+  const handleGranularityChange = (g: Granularity) => {
+    setGranularity(g);
+    load(range, g);
+  };
 
   if (loading && !data) {
     return (
@@ -203,8 +233,18 @@ function HistoriqueTab({ technicien }: { technicien: string }) {
 
   if (!data || data.periodes.length === 0) {
     return (
-      <div className="py-12 text-center text-sm text-slate-400">
-        Aucune donnee historique disponible
+      <div className="space-y-5 pt-4">
+        <div className="animate-fade-slide-up">
+          <CompactFilterBar
+            range={range}
+            granularity={granularity}
+            onRangeChange={handleRangeChange}
+            onGranularityChange={handleGranularityChange}
+          />
+        </div>
+        <div className="py-12 text-center text-sm text-slate-400">
+          Aucune donnee historique sur cette periode
+        </div>
       </div>
     );
   }
@@ -213,24 +253,14 @@ function HistoriqueTab({ technicien }: { technicien: string }) {
 
   return (
     <div className="space-y-5 pt-4">
-      {/* Granularity selector */}
-      <div className="flex items-center justify-between animate-fade-slide-up">
-        <div />
-        <div className="flex items-center gap-1 bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)] p-1">
-          {GRAN_OPTIONS.map((g) => (
-            <button
-              key={g.value}
-              onClick={() => setGranularity(g.value)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold font-[DM_Sans] transition-colors duration-150 ${
-                granularity === g.value
-                  ? 'bg-primary-500 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-600'
-              }`}
-            >
-              {g.label}
-            </button>
-          ))}
-        </div>
+      {/* Filter bar */}
+      <div className="animate-fade-slide-up">
+        <CompactFilterBar
+          range={range}
+          granularity={granularity}
+          onRangeChange={handleRangeChange}
+          onGranularityChange={handleGranularityChange}
+        />
       </div>
 
       {/* KPI Cards */}
@@ -348,8 +378,11 @@ function TechnicianDetail() {
     [tickets],
   );
 
+  const [exportError, setExportError] = useState<string | null>(null);
+
   const handleExportPlan = async () => {
     if (!decodedTech) return;
+    setExportError(null);
     const safeName = decodedTech.replace(/\s+/g, '_');
     const path = await save({
       defaultPath: `plan_action_${safeName}.xlsx`,
@@ -358,7 +391,9 @@ function TechnicianDetail() {
     if (!path) return;
     setExporting(true);
     try {
-      await invoke<ExportResult>('export_excel_plan_action', { technicien: decodedTech, path });
+      await invoke<ExportResult>('export_excel_plan_action', { technician: decodedTech, path });
+    } catch (e) {
+      setExportError(String(e));
     } finally {
       setExporting(false);
     }
@@ -414,9 +449,9 @@ function TechnicianDetail() {
       </header>
 
       <div className="px-8 pb-8 pt-6 space-y-6">
-        {error && (
+        {(error || exportError) && (
           <div className="rounded-2xl bg-danger-50 shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)] px-4 py-3 text-sm text-danger-500">
-            {error}
+            {error || exportError}
           </div>
         )}
 

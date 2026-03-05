@@ -553,10 +553,26 @@ pub fn get_technician_history(
     conn: &Connection,
     technicien: &str,
     granularity: &str,
+    date_from: Option<&str>,
+    date_to: Option<&str>,
 ) -> Result<TechHistory, rusqlite::Error> {
     let import_id = get_active_import_id(conn)?;
     let pe_ouv = periode_expr(granularity, "date_ouverture");
     let pe_reso = periode_expr(granularity, "date_resolution");
+
+    // Build optional date clauses
+    let date_clause_ouv = match (date_from, date_to) {
+        (Some(f), Some(t)) => format!(" AND date_ouverture >= '{f}' AND date_ouverture <= '{t}'"),
+        (Some(f), None) => format!(" AND date_ouverture >= '{f}'"),
+        (None, Some(t)) => format!(" AND date_ouverture <= '{t}'"),
+        _ => String::new(),
+    };
+    let date_clause_reso = match (date_from, date_to) {
+        (Some(f), Some(t)) => format!(" AND date_resolution >= '{f}' AND date_resolution <= '{t}'"),
+        (Some(f), None) => format!(" AND date_resolution >= '{f}'"),
+        (None, Some(t)) => format!(" AND date_resolution <= '{t}'"),
+        _ => String::new(),
+    };
 
     // 1. Entrants par période (tous les tickets assignés, par date d'ouverture)
     let mut entrants_map = std::collections::BTreeMap::<String, usize>::new();
@@ -564,7 +580,7 @@ pub fn get_technician_history(
         let sql = format!(
             "SELECT {pe_ouv} AS p, COUNT(*)
              FROM tickets
-             WHERE import_id = ?1 AND technicien_principal = ?2
+             WHERE import_id = ?1 AND technicien_principal = ?2{date_clause_ouv}
              GROUP BY p ORDER BY p"
         );
         let mut stmt = conn.prepare(&sql)?;
@@ -585,7 +601,7 @@ pub fn get_technician_history(
              FROM tickets
              WHERE import_id = ?1 AND technicien_principal = ?2
                AND statut IN ('Résolu', 'Clos')
-               AND date_resolution IS NOT NULL
+               AND date_resolution IS NOT NULL{date_clause_reso}
              GROUP BY p ORDER BY p"
         );
         let mut stmt = conn.prepare(&sql)?;
@@ -608,7 +624,7 @@ pub fn get_technician_history(
              WHERE import_id = ?1 AND technicien_principal = ?2
                AND statut IN ('Résolu', 'Clos')
                AND date_resolution IS NOT NULL
-               AND date_ouverture IS NOT NULL
+               AND date_ouverture IS NOT NULL{date_clause_reso}
              GROUP BY p ORDER BY p"
         );
         let mut stmt = conn.prepare(&sql)?;

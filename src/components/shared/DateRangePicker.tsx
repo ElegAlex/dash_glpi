@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { subDays, startOfQuarter, endOfQuarter, subQuarters, differenceInDays, format, parse, isValid } from 'date-fns';
+import { differenceInDays, format, parse, isValid } from 'date-fns';
 
 export type Granularity = 'day' | 'week' | 'month' | 'quarter' | 'year';
 
@@ -17,31 +17,9 @@ export function detectGranularity(from: Date, to: Date): Granularity {
   return 'year';
 }
 
-type Preset = '7d' | '30d' | 'quarter';
-
 interface DateRangePickerProps {
   value: DateRange;
   onChange: (range: DateRange, granularity: Granularity) => void;
-}
-
-const PRESETS: { id: Preset; label: string }[] = [
-  { id: '7d', label: '7j' },
-  { id: '30d', label: '30j' },
-  { id: 'quarter', label: 'Trim.' },
-];
-
-function getPresetRange(preset: Preset): DateRange {
-  const today = new Date();
-  switch (preset) {
-    case '7d':
-      return { from: subDays(today, 6), to: today };
-    case '30d':
-      return { from: subDays(today, 29), to: today };
-    case 'quarter': {
-      const lastQ = subQuarters(today, 1);
-      return { from: startOfQuarter(lastQ), to: endOfQuarter(lastQ) };
-    }
-  }
 }
 
 function formatFr(d: Date): string {
@@ -107,11 +85,6 @@ function DateInput({
 }
 
 export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
-  const handlePreset = (preset: Preset) => {
-    const range = getPresetRange(preset);
-    onChange(range, detectGranularity(range.from, range.to));
-  };
-
   const handleFromChange = (d: Date) => {
     const range = { from: d, to: value.to < d ? d : value.to };
     onChange(range, detectGranularity(range.from, range.to));
@@ -124,17 +97,7 @@ export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
 
   return (
     <div className="flex items-center gap-1.5">
-      {PRESETS.map((p) => (
-        <button
-          key={p.id}
-          onClick={() => handlePreset(p.id)}
-          className="px-2.5 py-1 rounded-lg text-xs font-medium font-[DM_Sans] transition-colors text-slate-500 hover:bg-slate-100 hover:text-slate-700"
-        >
-          {p.label}
-        </button>
-      ))}
-
-      <span className="text-[11px] text-slate-400 font-[Source_Sans_3] ml-1">du</span>
+      <span className="text-[11px] text-slate-400 font-[Source_Sans_3]">du</span>
       <DateInput value={value.from} onChange={handleFromChange} />
       <span className="text-[11px] text-slate-400 font-[Source_Sans_3]">au</span>
       <DateInput value={value.to} onChange={handleToChange} />

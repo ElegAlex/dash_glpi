@@ -293,9 +293,19 @@ pub async fn get_technician_history(
     state: tauri::State<'_, AppState>,
     technicien: String,
     granularity: Option<String>,
+    date_from: Option<String>,
+    date_to: Option<String>,
 ) -> Result<TechHistory, String> {
     let gran = granularity.as_deref().unwrap_or("month");
-    state.db(|conn| crate::db::queries::get_technician_history(conn, &technicien, gran))
+    state.db(|conn| {
+        crate::db::queries::get_technician_history(
+            conn,
+            &technicien,
+            gran,
+            date_from.as_deref(),
+            date_to.as_deref(),
+        )
+    })
 }
 
 #[tauri::command]
