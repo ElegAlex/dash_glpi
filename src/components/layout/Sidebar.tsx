@@ -7,7 +7,6 @@ import {
   TrendingUp,
   Timer,
   Search,
-  GitBranch,
   Settings,
 } from "lucide-react";
 
@@ -19,7 +18,6 @@ const NAV_ITEMS = [
   { icon: TrendingUp, label: "Bilan", path: "/bilan" },
   { icon: Timer, label: "Delais", path: "/delais" },
   { icon: Search, label: "Text Mining", path: "/mining" },
-  { icon: GitBranch, label: "Longitudinal", path: "/timeline" },
   { icon: Settings, label: "Parametres", path: "/settings" },
 ] as const;
 

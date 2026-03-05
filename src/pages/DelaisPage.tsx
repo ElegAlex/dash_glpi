@@ -70,6 +70,23 @@ function TrendChart({ data }: { data: DelaisKpi }) {
           symbolSize: 7,
           lineStyle: { width: 3, color: '#2E7D32' },
           itemStyle: { color: '#2E7D32', borderColor: '#FFF', borderWidth: 2 },
+          markLine: {
+            silent: true,
+            symbol: 'none',
+            data: [
+              {
+                yAxis: 80,
+                lineStyle: { type: 'dotted' as const, color: '#C62828', width: 2 },
+                label: {
+                  formatter: 'Objectif: 80%',
+                  position: 'insideEndTop' as const,
+                  color: '#C62828',
+                  fontSize: 11,
+                  fontWeight: 600,
+                },
+              },
+            ],
+          },
           areaStyle: {
             color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
               { offset: 0, color: 'rgba(46,125,50,0.15)' },
@@ -156,6 +173,63 @@ function DistributionChart({ tranches }: { tranches: TrancheDelai[] }) {
 
   const { chartRef } = useECharts(option, undefined, 'cpam-material');
   return <div ref={chartRef} className="h-[240px] w-full" />;
+}
+
+const CUMUL_THRESHOLDS = [
+  { label: '24h', index: 0, color: '#2E7D32' },
+  { label: '48h', index: 1, color: '#1565C0' },
+  { label: '7j', index: 2, color: '#FF8F00' },
+  { label: '30j', index: 3, color: '#6A1B9A' },
+];
+
+function CumulativeBar({ tranches }: { tranches: TrancheDelai[] }) {
+  const cumulatives = useMemo(() => {
+    let cumul = 0;
+    return CUMUL_THRESHOLDS.map((t) => {
+      cumul += tranches[t.index]?.pourcentage ?? 0;
+      const cumulCount = tranches
+        .slice(0, t.index + 1)
+        .reduce((s, tr) => s + tr.count, 0);
+      return { ...t, pct: Math.round(cumul * 10) / 10, count: cumulCount };
+    });
+  }, [tranches]);
+
+  return (
+    <div className="space-y-4">
+      {/* Progress bar */}
+      <div className="relative h-6 bg-slate-100 rounded-full overflow-hidden">
+        {[...cumulatives].reverse().map((c) => (
+          <div
+            key={c.label}
+            className="absolute inset-y-0 left-0 rounded-full transition-all duration-500"
+            style={{ width: `${c.pct}%`, backgroundColor: c.color, opacity: 0.75 }}
+          />
+        ))}
+      </div>
+      {/* Milestone cards */}
+      <div className="grid grid-cols-4 gap-3">
+        {cumulatives.map((c) => (
+          <div
+            key={c.label}
+            className="rounded-xl bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)] p-3 text-center"
+          >
+            <div className="flex items-center justify-center gap-1.5 mb-1">
+              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: c.color }} />
+              <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 font-[DM_Sans]">
+                {`\u2264 ${c.label}`}
+              </span>
+            </div>
+            <p className="text-2xl font-bold font-[DM_Sans] tracking-tight" style={{ color: c.color }}>
+              {c.pct}%
+            </p>
+            <p className="text-xs text-slate-400 mt-0.5">
+              {c.count.toLocaleString('fr-FR')} ticket(s)
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function DelaisPage() {
@@ -274,6 +348,16 @@ function DelaisPage() {
               />
             </div>
 
+            {/* Cumulative treatment rate */}
+            <div className="animate-fade-slide-up animation-delay-150">
+              <Card>
+                <h2 className="text-base font-semibold font-[DM_Sans] text-slate-700 mb-3">
+                  Taux de traitement cumule
+                </h2>
+                <CumulativeBar tranches={data.distribution} />
+              </Card>
+            </div>
+
             {/* Trend chart */}
             {data.trend.length > 0 && (
               <div className="animate-fade-slide-up animation-delay-150">
@@ -298,6 +382,7 @@ function DelaisPage() {
                 <DistributionChart tranches={data.distribution} />
               </Card>
             </div>
+
           </>
         )}
       </div>

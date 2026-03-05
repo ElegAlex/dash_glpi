@@ -120,10 +120,6 @@ pub fn run() {
             commands::import::get_import_history,
             commands::import::delete_import,
             commands::import::set_active_import,
-            commands::import::compare_imports,
-            commands::import::get_timeline_data,
-            commands::import::get_technician_timeline,
-            commands::import::get_technician_history,
             // Stock
             commands::stock::get_stock_overview,
             commands::stock::get_stock_by_technician,
