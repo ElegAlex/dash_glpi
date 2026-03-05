@@ -712,8 +712,8 @@ pub fn get_technician_history(
 
     let (stock_actuel, incidents, demandes, age_moyen): (i64, i64, i64, f64) = conn.query_row(
         "SELECT COUNT(*),
-                SUM(CASE WHEN type_ticket = 'Incident' THEN 1 ELSE 0 END),
-                SUM(CASE WHEN type_ticket = 'Demande' THEN 1 ELSE 0 END),
+                COALESCE(SUM(CASE WHEN type_ticket = 'Incident' THEN 1 ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN type_ticket = 'Demande' THEN 1 ELSE 0 END), 0),
                 COALESCE(AVG(CAST(anciennete_jours AS REAL)), 0.0)
          FROM tickets
          WHERE import_id = ?1 AND technicien_principal = ?2 AND est_vivant = 1",
