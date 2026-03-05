@@ -547,6 +547,52 @@ pub fn get_import_history(conn: &Connection) -> Result<Vec<ImportRecord>, rusqli
     Ok(rows)
 }
 
+/// Liste tous les techniciens ayant traité au moins un ticket (pas seulement ceux avec du stock).
+pub fn get_all_technicians(
+    conn: &Connection,
+) -> Result<Vec<crate::commands::import::TechnicianSummary>, rusqlite::Error> {
+    let import_id = get_active_import_id(conn)?;
+    let seuil = get_seuil_tickets(conn);
+
+    let sql = "\
+        SELECT technicien_principal,
+               COUNT(*) AS total_traites,
+               SUM(CASE WHEN est_vivant = 1 THEN 1 ELSE 0 END) AS stock_actuel,
+               SUM(CASE WHEN type_ticket = 'Incident' THEN 1 ELSE 0 END) AS incidents,
+               SUM(CASE WHEN type_ticket = 'Demande' THEN 1 ELSE 0 END) AS demandes
+        FROM tickets
+        WHERE import_id = ?1
+          AND technicien_principal IS NOT NULL AND technicien_principal != ''
+        GROUP BY technicien_principal
+        ORDER BY total_traites DESC";
+
+    let mut stmt = conn.prepare(sql)?;
+    let rows = stmt
+        .query_map(rusqlite::params![import_id], |row| {
+            let tech: String = row.get(0)?;
+            let total_traites = row.get::<_, i64>(1)? as usize;
+            let stock_actuel = row.get::<_, i64>(2)? as usize;
+            let incidents = row.get::<_, i64>(3)? as usize;
+            let demandes = row.get::<_, i64>(4)? as usize;
+            Ok((tech, total_traites, stock_actuel, incidents, demandes))
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(rows
+        .into_iter()
+        .map(|(tech, total_traites, stock_actuel, incidents, demandes)| {
+            crate::commands::import::TechnicianSummary {
+                technicien: tech,
+                total_traites,
+                stock_actuel,
+                incidents,
+                demandes,
+                couleur_seuil: couleur_charge(stock_actuel, seuil),
+            }
+        })
+        .collect())
+}
+
 /// Historique complet d'un technicien : KPI + périodes
 /// (entrants, sortants, stock cumulé, MTTR) avec granularité configurable.
 pub fn get_technician_history(
@@ -675,12 +721,15 @@ pub fn get_technician_history(
         |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
     )?;
 
-    let mttr_global: Option<f64> = conn.query_row(
-        "SELECT AVG(julianday(derniere_modification) - julianday(date_ouverture))
+    let mttr_sql = format!(
+        "SELECT AVG(julianday(date_resolution) - julianday(date_ouverture))
          FROM tickets
          WHERE import_id = ?1 AND technicien_principal = ?2
            AND statut IN ('Résolu', 'Clos')
-           AND derniere_modification IS NOT NULL AND date_ouverture IS NOT NULL",
+           AND date_resolution IS NOT NULL AND date_ouverture IS NOT NULL{date_clause_reso}"
+    );
+    let mttr_global: Option<f64> = conn.query_row(
+        &mttr_sql,
         rusqlite::params![import_id, technicien],
         |row| row.get(0),
     )?;

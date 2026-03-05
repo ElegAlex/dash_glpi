@@ -261,6 +261,24 @@ pub async fn get_import_history(
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct TechnicianSummary {
+    pub technicien: String,
+    pub total_traites: usize,
+    pub stock_actuel: usize,
+    pub incidents: usize,
+    pub demandes: usize,
+    pub couleur_seuil: String,
+}
+
+#[tauri::command]
+pub async fn get_all_technicians(
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<TechnicianSummary>, String> {
+    state.db(|conn| crate::db::queries::get_all_technicians(conn))
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TechHistory {
     pub kpi: TechHistoryKpi,
     pub periodes: Vec<TechHistoryPeriod>,

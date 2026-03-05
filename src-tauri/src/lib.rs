@@ -121,6 +121,7 @@ pub fn run() {
             commands::import::delete_import,
             commands::import::set_active_import,
             commands::import::get_technician_history,
+            commands::import::get_all_technicians,
             // Stock
             commands::stock::get_stock_overview,
             commands::stock::get_stock_by_technician,

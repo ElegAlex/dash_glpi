@@ -2,12 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useInvoke } from '../hooks/useInvoke';
 
-interface TechnicianStock {
+interface TechnicianSummary {
   technicien: string;
-  total: number;
+  totalTraites: number;
+  stockActuel: number;
   incidents: number;
   demandes: number;
-  ageMoyenJours: number;
   couleurSeuil: string;
 }
 
@@ -20,18 +20,18 @@ const RAG_STYLES: Record<string, string> = {
 
 function SuiviPage() {
   const navigate = useNavigate();
-  const { data, loading, error, execute } = useInvoke<TechnicianStock[]>();
+  const { data, loading, error, execute } = useInvoke<TechnicianSummary[]>();
   const [search, setSearch] = useState('');
 
   useEffect(() => {
-    execute('get_stock_by_technician', { filters: null });
+    execute('get_all_technicians', {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = useMemo(() => {
     if (!data) return [];
     const q = search.toLowerCase().trim();
     const list = q ? data.filter((t) => t.technicien.toLowerCase().includes(q)) : data;
-    return [...list].sort((a, b) => b.total - a.total);
+    return [...list].sort((a, b) => a.technicien.localeCompare(b.technicien, 'fr'));
   }, [data, search]);
 
   return (
@@ -75,28 +75,26 @@ function SuiviPage() {
         )}
 
         {filtered.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 animate-fade-slide-up">
+          <div className="space-y-2 animate-fade-slide-up">
             {filtered.map((tech) => (
               <div
                 key={tech.technicien}
                 onClick={() => navigate(`/suivi/${encodeURIComponent(tech.technicien)}`)}
-                className="bg-white rounded-2xl p-6 cursor-pointer group
+                className="bg-white rounded-2xl px-6 py-4 cursor-pointer group
                   shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)]
                   hover:shadow-[0_3px_6px_rgba(0,0,0,0.10),0_2px_4px_rgba(0,0,0,0.06)]
-                  transition-all duration-200 hover:-translate-y-0.5"
+                  transition-all duration-200 flex items-center gap-6"
               >
-                <div className="flex items-start justify-between mb-2">
-                  <h3 className="text-sm font-semibold font-[DM_Sans] text-slate-800 group-hover:text-primary-500 transition-colors truncate pr-2">
-                    {tech.technicien}
-                  </h3>
-                  <span className={`shrink-0 px-2 py-0.5 rounded-lg text-xs font-semibold capitalize ${RAG_STYLES[tech.couleurSeuil] ?? ''}`}>
-                    {tech.total}
-                  </span>
-                </div>
-                <div className="flex items-center gap-4 text-xs text-slate-400 font-[Source_Sans_3]">
+                <h3 className="text-sm font-semibold font-[DM_Sans] text-slate-800 group-hover:text-primary-500 transition-colors truncate min-w-[200px]">
+                  {tech.technicien}
+                </h3>
+                <span className={`shrink-0 px-2.5 py-0.5 rounded-lg text-xs font-semibold capitalize ${RAG_STYLES[tech.couleurSeuil] ?? ''}`}>
+                  {tech.stockActuel} en stock
+                </span>
+                <div className="flex items-center gap-5 text-xs text-slate-400 font-[Source_Sans_3] ml-auto">
+                  <span>{tech.totalTraites} traites</span>
                   <span>{tech.incidents} inc.</span>
                   <span>{tech.demandes} dem.</span>
-                  <span>Age moy. {Math.round(tech.ageMoyenJours)}j</span>
                 </div>
               </div>
             ))}
