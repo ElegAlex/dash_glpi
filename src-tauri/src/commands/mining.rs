@@ -2,12 +2,10 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::analytics::anomalies::{
-    detect_zscore_anomalies, find_duplicates, TicketDelay, TicketForDuplicates,
-};
+use crate::analytics::anomalies::{find_duplicates, TicketForDuplicates};
 use crate::analytics::clustering::run_kmeans;
 use crate::nlp::preprocessing::{
-    build_stem_mapping, preprocess_corpus, preprocess_text_with_originals, resolve_stem,
+    build_stem_mapping, preprocess_text_with_originals, resolve_stem,
     StopWordFilter,
 };
 use crate::nlp::tfidf::{
@@ -22,6 +20,7 @@ use crate::state::AppState;
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TextAnalysisRequest {
+    #[allow(dead_code)]
     pub corpus: String,
     pub scope: String,
     pub group_by: Option<String>,

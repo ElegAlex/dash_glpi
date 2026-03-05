@@ -16,9 +16,11 @@ pub struct TfIdfResult {
     pub matrix: sprs::CsMat<f64>,
     /// Index → mot (stem) ; trié alphabétiquement pour ordre déterministe
     pub vocabulary: Vec<String>,
-    /// Mot → index dans le vocabulaire
+    /// Mot → index dans le vocabulaire (utilisé dans les tests)
+    #[allow(dead_code)]
     pub vocab_index: HashMap<String, usize>,
-    /// Valeurs IDF par terme (smooth IDF)
+    /// Valeurs IDF par terme (smooth IDF, utilisé dans les tests)
+    #[allow(dead_code)]
     pub idf: Vec<f64>,
     /// Fréquence document par terme (nombre de docs contenant le terme, avant filtrage)
     pub doc_freq: Vec<usize>,
@@ -47,6 +49,7 @@ pub struct CorpusStats {
     pub vocabulary_size: usize,
     pub avg_tokens_per_doc: f64,
     /// Proportion de zéros dans la matrice TF-IDF (0.0 = dense, 1.0 = vide)
+    #[allow(dead_code)]
     pub sparsity: f64,
 }
 
@@ -303,11 +306,6 @@ pub fn corpus_stats(result: &TfIdfResult, total_tokens: usize) -> CorpusStats {
         avg_tokens_per_doc,
         sparsity,
     }
-}
-
-/// Retourne l'index d'un terme dans le vocabulaire, ou `None` s'il est absent (filtré ou inconnu).
-pub fn term_index(result: &TfIdfResult, term: &str) -> Option<usize> {
-    result.vocab_index.get(term).copied()
 }
 
 // ─────────────────────────────────────────────

@@ -195,7 +195,7 @@ mod e2e_tests {
 
         // 1. Parse CSV
         let parse_output =
-            crate::parser::parse_csv(&fixture_path, |_, _| {}).expect("CSV parsing failed");
+            crate::parser::pipeline::parse_csv(&fixture_path, |_, _| {}).expect("CSV parsing failed");
 
         assert!(
             parse_output.tickets.len() > 100,
@@ -338,7 +338,7 @@ mod e2e_tests {
         }
 
         let parse_output =
-            crate::parser::parse_csv(&fixture_path, |_, _| {}).expect("CSV parsing failed");
+            crate::parser::pipeline::parse_csv(&fixture_path, |_, _| {}).expect("CSV parsing failed");
 
         let conn = setup_db();
         let config =

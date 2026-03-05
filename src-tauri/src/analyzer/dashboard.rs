@@ -95,6 +95,7 @@ pub struct VolumetrieKpi {
     pub total_resolus: i64,
     pub ratio_sortie_entree: f64,
     pub moyenne_mensuelle_creation: f64,
+    pub stock_debut: i64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -224,7 +225,9 @@ fn date_filter_clause_on(
         params_vec.push(d.clone());
     }
     if let Some(ref d) = date_fin {
-        clauses.push(format!("{col} <= ?"));
+        // Use < date(?, '+1 day') instead of <= ? to correctly handle
+        // datetime values stored as ISO strings (e.g. "2022-12-31T09:00:00" > "2022-12-31")
+        clauses.push(format!("{col} < date(?, '+1 day')"));
         params_vec.push(d.clone());
     }
     let clause = if clauses.is_empty() {
@@ -985,6 +988,7 @@ fn build_volumetrie(
     date_clause_resolution: &str,
     date_params_resolution: &[String],
     gran: &str,
+    stock_debut: i64,
 ) -> Result<VolumetrieKpi, rusqlite::Error> {
     let pe_ouv = period_expr(gran, "date_ouverture");
     let pe_clo = period_expr(gran, "date_cloture_approx");
@@ -1064,6 +1068,7 @@ fn build_volumetrie(
         total_resolus,
         ratio_sortie_entree: ratio,
         moyenne_mensuelle_creation: round1(total_crees as f64 / nb_mois as f64),
+        stock_debut,
     })
 }
 
@@ -1253,13 +1258,20 @@ pub fn build_dashboard_kpi(
     let (date_clause_res, date_params_res) =
         date_filter_clause_on("date_cloture_approx", date_debut, date_fin);
 
+    // Compute historical opening stock at the start of the period
+    let stock_debut = if let Some(ref d) = date_debut {
+        crate::db::queries::get_stock_at_date(conn, d)? as i64
+    } else {
+        0
+    };
+
     let mut meta = build_meta(conn, import_id, &date_clause, &date_params)?;
     let prise_en_charge = build_prise_en_charge(conn, import_id, &date_clause, &date_params)?;
     let resolution = build_resolution(conn, import_id, &date_clause, &date_params, gran)?;
     let taux_n1 = build_taux_n1(conn, import_id, &date_clause, &date_params, gran)?;
     let volumes = build_volumetrie(
         conn, import_id, &date_clause, &date_params,
-        &date_clause_res, &date_params_res, gran,
+        &date_clause_res, &date_params_res, gran, stock_debut,
     )?;
     let typologie = build_typologie(conn, import_id, meta.has_categorie, &date_clause, &date_params)?;
 
@@ -1285,6 +1297,8 @@ mod tests {
     fn setup_test_db() -> Connection {
         let conn = Connection::open_in_memory().unwrap();
         conn.execute_batch(include_str!("../db/sql/001_initial.sql"))
+            .unwrap();
+        conn.execute_batch(include_str!("../db/sql/003_date_resolution.sql"))
             .unwrap();
 
         // Insert test import

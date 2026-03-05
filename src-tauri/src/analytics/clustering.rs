@@ -12,10 +12,12 @@ use ndarray::{Array1, Array2};
 /// Résultat du clustering K-Means.
 #[derive(Debug, Clone)]
 pub struct ClusteringResult {
+    #[allow(dead_code)]
     pub k_optimal: usize,
     pub clusters: Vec<ClusterInfo>,
     pub silhouette_score: f64,
     /// (k, inertia) pour chaque K testé dans k_min..=k_max
+    #[allow(dead_code)]
     pub inertias: Vec<(usize, f64)>,
 }
 

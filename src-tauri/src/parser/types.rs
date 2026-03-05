@@ -60,21 +60,6 @@ pub struct GlpiTicketNormalized {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CsvImportResult {
-    pub import_id: i64,
-    pub total_tickets: usize,
-    pub vivants_count: usize,
-    pub termines_count: usize,
-    pub skipped_rows: usize,
-    pub warnings: Vec<ParseWarning>,
-    pub detected_columns: Vec<String>,
-    pub missing_optional_columns: Vec<String>,
-    pub unique_statuts: Vec<String>,
-    pub parse_duration_ms: u64,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
 pub struct ParseWarning {
     pub line: usize,
     pub message: String,

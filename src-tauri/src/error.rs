@@ -20,9 +20,6 @@ pub enum AppError {
     #[error("Fichier vide ou sans données")]
     EmptyFile,
 
-    #[error("Import introuvable: {0}")]
-    ImportNotFound(i64),
-
     #[error("{0}")]
     Custom(String),
 }

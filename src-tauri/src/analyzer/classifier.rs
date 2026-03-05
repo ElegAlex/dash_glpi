@@ -42,6 +42,7 @@ pub fn classify_ticket(ticket: &mut GlpiTicketNormalized, config: &AppConfig) {
 
 /// Retourne le poids de pondération pour une priorité GLPI (libellé français).
 /// Inclut "Majeure" (non standard GLPI vanilla, présent dans l'export CPAM 92).
+#[allow(dead_code)]
 pub fn poids_priorite(priorite: &str) -> u8 {
     match priorite.trim() {
         "Très haute" => 5,

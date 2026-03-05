@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 /// Ticket avec délai de résolution pour l'analyse d'anomalies
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct TicketDelay {
     pub ticket_id: u64,
     pub titre: String,
@@ -12,6 +13,7 @@ pub struct TicketDelay {
 
 /// Anomalie détectée
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct AnomalyResult {
     pub ticket_id: u64,
     pub titre: String,
@@ -44,6 +46,7 @@ pub struct DuplicatePair {
 }
 
 /// Statistiques descriptives (mean, std) d'une slice
+#[allow(dead_code)]
 fn mean_std(values: &[f64]) -> (f64, f64) {
     if values.is_empty() {
         return (0.0, 0.0);
@@ -65,6 +68,7 @@ fn mean_std(values: &[f64]) -> (f64, f64) {
 /// 3. Calculer mean et std de la distribution log-transformée
 /// 4. Pour chaque ticket : `z = (log_delay - mean) / std`
 /// 5. Marquer comme anomalie si Z > z_threshold
+#[allow(dead_code)]
 pub fn detect_zscore_anomalies(
     tickets: &[TicketDelay],
     z_threshold: f64,

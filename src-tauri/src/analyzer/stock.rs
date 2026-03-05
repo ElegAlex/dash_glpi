@@ -2,6 +2,7 @@ use crate::commands::stock::{AgeRangeCount, TechnicianStock};
 use crate::config::AppConfig;
 
 /// Médiane d'un slice de f64. Retourne 0.0 si vide.
+#[allow(dead_code)]
 pub fn compute_median(values: &[f64]) -> f64 {
     if values.is_empty() {
         return 0.0;
@@ -17,6 +18,7 @@ pub fn compute_median(values: &[f64]) -> f64 {
 }
 
 /// Distribue des anciennetés en 4 tranches : <7j, 7-30j, 30-90j, >90j.
+#[allow(dead_code)]
 pub fn compute_age_distribution(anciennetes: &[i64]) -> Vec<AgeRangeCount> {
     let total = anciennetes.len();
 

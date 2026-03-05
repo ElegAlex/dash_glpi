@@ -9,14 +9,15 @@ const PALETTE = ['#1565C0', '#2E7D32', '#FF8F00', '#6A1B9A', '#00838F', '#C62828
 interface TypologieSectionProps {
   typologie: TypologieKpi;
   volumes: VolumePeriode[];
+  stockDebut: number;
 }
 
-function SoldeEvolutionChart({ data }: { data: VolumePeriode[] }) {
+function SoldeEvolutionChart({ data, stockDebut }: { data: VolumePeriode[]; stockDebut: number }) {
   const option = useMemo(() => {
     const periodes = data.map((d) => d.periode);
 
-    // Cumulative balance
-    let cumul = 0;
+    // Cumulative balance starting from historical stock
+    let cumul = stockDebut;
     const soldeCumule = data.map((d) => {
       cumul += d.crees - d.resolus;
       return cumul;
@@ -155,7 +156,7 @@ function HorizontalBarChart({ data, limit = 10 }: { data: VentilationItem[]; lim
   return <div ref={chartRef} style={{ height: 280, width: '100%' }} />;
 }
 
-export function TypologieSection({ typologie, volumes }: TypologieSectionProps) {
+export function TypologieSection({ typologie, volumes, stockDebut }: TypologieSectionProps) {
   const hasCategories = typologie.categorieDisponible && typologie.parCategorie && typologie.parCategorie.length > 0;
 
   return (
@@ -164,7 +165,7 @@ export function TypologieSection({ typologie, volumes }: TypologieSectionProps) 
         <h3 className="text-sm font-semibold font-[DM_Sans] text-slate-700 mb-3">
           Evolution du solde (crees - resolus)
         </h3>
-        <SoldeEvolutionChart data={volumes} />
+        <SoldeEvolutionChart data={volumes} stockDebut={stockDebut} />
       </Card>
       <Card>
         <h3 className="text-sm font-semibold font-[DM_Sans] text-slate-700 mb-3">

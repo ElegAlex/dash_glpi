@@ -17,11 +17,6 @@ pub fn create_header_format() -> Format {
         .set_text_wrap()
 }
 
-/// Format date dd/mm/yyyy (RG-050)
-pub fn create_date_format() -> Format {
-    Format::new().set_num_format("dd/mm/yyyy")
-}
-
 /// Format nombre décimal #,##0.00 (RG-051)
 pub fn create_number_format() -> Format {
     Format::new().set_num_format("#,##0.00")

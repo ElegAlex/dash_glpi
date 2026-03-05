@@ -67,6 +67,7 @@ export interface VolumetrieKpi {
   totalResolus: number;
   ratioSortieEntree: number;
   moyenneMensuelleCreation: number;
+  stockDebut: number;
 }
 
 export interface TypologieKpi {

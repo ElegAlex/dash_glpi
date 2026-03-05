@@ -118,6 +118,7 @@ const SIGNATURE_PHRASES: &[&str] = &[
 ///   tokenisation, with pre-compiled case-insensitive regexes.
 pub struct StopWordFilter {
     /// Phrase patterns for layers 3+4 (lowercase, kept for debugging / inspection)
+    #[allow(dead_code)]
     phrase_patterns: Vec<String>,
     /// Pre-compiled case-insensitive regex per phrase pattern
     phrase_regexes: Vec<Regex>,
@@ -206,6 +207,7 @@ pub fn strip_html(text: &str) -> String {
 /// 6. Stem with Snowball French algorithm.
 ///
 /// Returns a `Vec<String>` of clean stems ready for TF-IDF or clustering.
+#[allow(dead_code)]
 pub fn preprocess_text(text: &str, filter: &StopWordFilter) -> Vec<String> {
     let after_html = strip_html(text);
     let after_phrases = filter.remove_phrases(&after_html);
@@ -225,6 +227,7 @@ pub fn preprocess_text(text: &str, filter: &StopWordFilter) -> Vec<String> {
 }
 
 /// Apply `preprocess_text` to every document in a corpus.
+#[allow(dead_code)]
 pub fn preprocess_corpus(texts: &[String], filter: &StopWordFilter) -> Vec<Vec<String>> {
     texts.iter().map(|t| preprocess_text(t, filter)).collect()
 }

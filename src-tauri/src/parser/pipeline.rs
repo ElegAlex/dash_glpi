@@ -31,6 +31,7 @@ pub struct ParseOutput {
     pub missing_optional_columns: Vec<String>,
     pub unique_statuts: Vec<String>,
     pub unique_types: Vec<String>,
+    #[allow(dead_code)]
     pub unique_groupes: Vec<String>,
     pub parse_duration_ms: u64,
 }

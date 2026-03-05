@@ -197,7 +197,7 @@ pub async fn get_delais_kpi(
             .collect();
 
         let mut trend_vec = Vec::new();
-        for (key, label, _, _) in &period_keys {
+        for (key, _label, _, _) in &period_keys {
             let (total, lt24, lt48) = by_period.get(key.as_str()).copied().unwrap_or((0, 0, 0));
             trend_vec.push(DelaisTrend {
                 period_key: key.clone(),
