@@ -135,7 +135,8 @@ INSERT OR IGNORE INTO config (key, value) VALUES
     ('seuil_couleur_jaune', '20'),
     ('seuil_couleur_orange', '40'),
     ('statuts_vivants', '["Nouveau","En cours (Attribué)","En cours (Planifié)","En attente"]'),
-    ('statuts_termines', '["Clos","Résolu"]');
+    ('statuts_termines', '["Clos","Résolu"]'),
+    ('taille_police_axes', '11');
 
 -- ============================================================
 -- TABLE : keyword_dictionaries

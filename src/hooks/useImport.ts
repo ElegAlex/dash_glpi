@@ -28,7 +28,7 @@ const INITIAL_STATE: ImportState = {
 export function useImport() {
   const [state, setState] = useState<ImportState>(INITIAL_STATE);
 
-  const startImport = useCallback(async (path: string) => {
+  const startImport = useCallback(async (path: string, merge?: boolean) => {
     setState({ ...INITIAL_STATE, isImporting: true });
 
     const onProgress = new Channel<ImportEvent>();
@@ -49,7 +49,11 @@ export function useImport() {
     };
 
     try {
-      const result = await invoke<ImportResult>("import_csv", { path, onProgress });
+      const result = await invoke<ImportResult>("import_csv", {
+        path,
+        merge: merge ?? false,
+        onProgress,
+      });
       setState((prev) => ({
         ...prev,
         isImporting: false,

@@ -1085,18 +1085,25 @@ pub fn get_resolution_durations(
     Ok(rows)
 }
 
-/// Stock à une date donnée (approximation) :
-/// COUNT tickets de l'import actif dont `date_ouverture` ≤ date ET `est_vivant` = 1.
+/// Stock à une date donnée :
+/// (tickets ouverts avant la date) − (tickets clos avant la date) = stock réel historique.
 pub fn get_stock_at_date(conn: &Connection, date: &str) -> Result<usize, rusqlite::Error> {
     let import_id = get_active_import_id(conn)?;
-    conn.query_row(
+    let opened: i64 = conn.query_row(
         "SELECT COUNT(*) FROM tickets \
-         WHERE import_id = ?1 \
-           AND date_ouverture < date(?2, '+1 day') \
-           AND est_vivant = 1",
+         WHERE import_id = ?1 AND date_ouverture < ?2",
         rusqlite::params![import_id, date],
-        |row| row.get::<_, i64>(0).map(|v| v as usize),
-    )
+        |row| row.get(0),
+    )?;
+    let closed: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM tickets \
+         WHERE import_id = ?1 AND est_vivant = 0 \
+           AND date_resolution IS NOT NULL AND date_resolution != '' \
+           AND date_resolution < ?2",
+        rusqlite::params![import_id, date],
+        |row| row.get(0),
+    )?;
+    Ok((opened - closed).max(0) as usize)
 }
 
 /// Ventilation par technicien sur la période : (technicien, entrants, sortants).
@@ -1297,7 +1304,7 @@ mod tests {
                 detected_columns, unique_statuts, unique_types,
                 import_date, is_active
              ) VALUES ('test2.csv', 10, 10, 0, 5, 5, '[]', '[]', '[]',
-                       '2026-03-01T10:00:00', 0)",
+                       '2099-01-01T10:00:00', 0)",
             [],
         )
         .unwrap();
@@ -1730,19 +1737,20 @@ mod tests_bilan {
     }
 
     #[test]
-    fn test_stock_at_date_inclut_seulement_vivants() {
-        // Au 2026-01-31 : tickets ouverts avant cette date : T10 (jan 5, vivant), T11 (jan 15, mort), T14 (dec 20, mort)
-        // Seul T10 est vivant → stock = 1
+    fn test_stock_at_date_historique() {
+        // Au 2026-01-31 : ouverts avant = T10 (jan 5) + T11 (jan 15) + T14 (dec 20) = 3
+        // Clos (date_resolution) avant = T11 (jan 25) = 1
+        // Stock historique = 3 - 1 = 2
         let (conn, _) = setup_bilan();
         let stock = get_stock_at_date(&conn, "2026-01-31").unwrap();
-        assert_eq!(stock, 1);
+        assert_eq!(stock, 2);
     }
 
     #[test]
     fn test_stock_at_date_fin_fevrier() {
-        // Au 2026-02-28 : T10 (vivant, jan 5), T12 (vivant, fev 3), T15 non (mars)
-        // T11 (mort), T13 (mort), T14 (mort)
-        // vivants ouverts <= 2026-02-28 : T10 + T12 → 2
+        // Au 2026-02-28 : ouverts avant = T10+T11+T12+T13+T14 = 5 (T15 mars, exclu)
+        // Clos avant = T11 (jan 25) + T13 (fev 20) + T14 (fev 1) = 3
+        // Stock historique = 5 - 3 = 2
         let (conn, _) = setup_bilan();
         let stock = get_stock_at_date(&conn, "2026-02-28").unwrap();
         assert_eq!(stock, 2);

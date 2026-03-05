@@ -210,20 +210,21 @@ fn period_expr(granularity: &str, date_col: &str) -> String {
     }
 }
 
-/// Builds a WHERE clause fragment for optional date filtering.
+/// Builds a WHERE clause fragment for optional date filtering on a given column.
 /// Returns (clause_string, params_vec).
-fn date_filter_clause(
+fn date_filter_clause_on(
+    col: &str,
     date_debut: &Option<String>,
     date_fin: &Option<String>,
 ) -> (String, Vec<String>) {
     let mut clauses = Vec::new();
     let mut params_vec = Vec::new();
     if let Some(ref d) = date_debut {
-        clauses.push("date_ouverture >= ?".to_string());
+        clauses.push(format!("{col} >= ?"));
         params_vec.push(d.clone());
     }
     if let Some(ref d) = date_fin {
-        clauses.push("date_ouverture <= ?".to_string());
+        clauses.push(format!("{col} <= ?"));
         params_vec.push(d.clone());
     }
     let clause = if clauses.is_empty() {
@@ -232,6 +233,15 @@ fn date_filter_clause(
         format!(" AND {}", clauses.join(" AND "))
     };
     (clause, params_vec)
+}
+
+/// Builds a WHERE clause fragment for optional date filtering.
+/// Returns (clause_string, params_vec).
+fn date_filter_clause(
+    date_debut: &Option<String>,
+    date_fin: &Option<String>,
+) -> (String, Vec<String>) {
+    date_filter_clause_on("date_ouverture", date_debut, date_fin)
 }
 
 /// Safe json_array_length expression that handles empty string, '[]', and NULL.
@@ -972,6 +982,8 @@ fn build_volumetrie(
     import_id: i64,
     date_clause: &str,
     date_params: &[String],
+    date_clause_resolution: &str,
+    date_params_resolution: &[String],
     gran: &str,
 ) -> Result<VolumetrieKpi, rusqlite::Error> {
     let pe_ouv = period_expr(gran, "date_ouverture");
@@ -1003,17 +1015,17 @@ fn build_volumetrie(
         volume_map.entry(mois).or_insert((0, 0)).0 = cnt;
     }
 
-    // Resolved by period
+    // Resolved by period — filter on date_cloture_approx (not date_ouverture)
     let sql_resolus = format!(
         "SELECT {pe_clo} AS periode, COUNT(*) AS cnt
          FROM tickets
          WHERE import_id = ? AND est_vivant = 0 AND date_cloture_approx IS NOT NULL{}
          GROUP BY periode
          ORDER BY periode",
-        date_clause
+        date_clause_resolution
     );
     let mut p2: Vec<Box<dyn rusqlite::types::ToSql>> = vec![Box::new(import_id)];
-    for p in date_params {
+    for p in date_params_resolution {
         p2.push(Box::new(p.clone()));
     }
     let mut stmt2 = conn.prepare(&sql_resolus)?;
@@ -1238,12 +1250,17 @@ pub fn build_dashboard_kpi(
     };
 
     let (date_clause, date_params) = date_filter_clause(date_debut, date_fin);
+    let (date_clause_res, date_params_res) =
+        date_filter_clause_on("date_cloture_approx", date_debut, date_fin);
 
     let mut meta = build_meta(conn, import_id, &date_clause, &date_params)?;
     let prise_en_charge = build_prise_en_charge(conn, import_id, &date_clause, &date_params)?;
     let resolution = build_resolution(conn, import_id, &date_clause, &date_params, gran)?;
     let taux_n1 = build_taux_n1(conn, import_id, &date_clause, &date_params, gran)?;
-    let volumes = build_volumetrie(conn, import_id, &date_clause, &date_params, gran)?;
+    let volumes = build_volumetrie(
+        conn, import_id, &date_clause, &date_params,
+        &date_clause_res, &date_params_res, gran,
+    )?;
     let typologie = build_typologie(conn, import_id, meta.has_categorie, &date_clause, &date_params)?;
 
     meta.calcul_duration_ms = start.elapsed().as_millis() as u64;

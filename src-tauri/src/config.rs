@@ -15,6 +15,7 @@ pub struct AppConfig {
     pub seuil_similarite_doublons: f64,
     pub statuts_vivants: Vec<String>,
     pub statuts_termines: Vec<String>,
+    pub taille_police_axes: u32,
 }
 
 pub fn get_config_from_db(conn: &Connection) -> Result<AppConfig, rusqlite::Error> {
@@ -40,6 +41,7 @@ pub fn get_config_from_db(conn: &Connection) -> Result<AppConfig, rusqlite::Erro
             "En attente".into(),
         ],
         statuts_termines: vec!["Clos".into(), "Résolu".into()],
+        taille_police_axes: 11,
     };
 
     for row in rows {
@@ -74,6 +76,7 @@ pub fn get_config_from_db(conn: &Connection) -> Result<AppConfig, rusqlite::Erro
                     config.statuts_termines = v;
                 }
             }
+            "taille_police_axes" => config.taille_police_axes = value.parse().unwrap_or(11),
             _ => {}
         }
     }
@@ -126,6 +129,10 @@ pub fn update_config_in_db(conn: &Connection, config: &AppConfig) -> Result<(), 
         (
             "statuts_termines",
             serde_json::to_string(&config.statuts_termines).unwrap_or_default(),
+        ),
+        (
+            "taille_police_axes",
+            config.taille_police_axes.to_string(),
         ),
     ];
 

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useInvoke } from "../hooks/useInvoke";
+import { useSettingsStore } from "../stores/settingsStore";
 import type { AppConfig } from "../types/config";
 
 function TagList({
@@ -120,6 +121,7 @@ function SettingsCard({
 
 function SettingsPage() {
   const { data: config, execute: loadConfig } = useInvoke<AppConfig>();
+  const setStoreConfig = useSettingsStore((s) => s.setConfig);
   const [form, setForm] = useState<AppConfig | null>(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{
@@ -145,6 +147,7 @@ function SettingsPage() {
     setMessage(null);
     try {
       await invoke("update_config", { config: form });
+      setStoreConfig(form);
       setMessage({ type: "success", text: "Configuration enregistree" });
       loadConfig("get_config");
     } catch (err) {
@@ -318,7 +321,21 @@ function SettingsPage() {
         </SettingsCard>
         </div>
 
-        {/* Section 4 — Statuts */}
+        {/* Section 4 — Graphiques */}
+        <div className="animate-fade-slide-up animation-delay-450">
+        <SettingsCard title="Graphiques">
+          <div className="space-y-4">
+            <NumberField
+              label="Taille de police des axes"
+              value={form.taillePoliceAxes}
+              onChange={(v) => set("taillePoliceAxes", Math.max(8, Math.min(18, v)))}
+              help="Taille en pixels des labels des abscisses et ordonnees (defaut : 11)"
+            />
+          </div>
+        </SettingsCard>
+        </div>
+
+        {/* Section 5 — Statuts */}
         <div className="animate-fade-slide-up animation-delay-450">
         <SettingsCard title="Statuts">
           <div className="space-y-6">

@@ -121,6 +121,9 @@ function ImportContent() {
   } = useImport();
   const { data: history, execute: fetchHistory } = useInvoke<ImportHistory[]>();
   const setCurrentImportId = useAppStore((s) => s.setCurrentImportId);
+  const [mergeMode, setMergeMode] = useState(false);
+
+  const hasActiveImport = history?.some((h) => h.isActive) ?? false;
 
   useEffect(() => {
     fetchHistory('get_import_history');
@@ -160,7 +163,7 @@ function ImportContent() {
     });
     if (typeof selected === 'string') {
       reset();
-      await startImport(selected);
+      await startImport(selected, mergeMode);
     }
   }
 
@@ -179,13 +182,35 @@ function ImportContent() {
               Importer un fichier
             </h2>
 
+            {hasActiveImport && (
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={mergeMode}
+                  onChange={(e) => setMergeMode(e.target.checked)}
+                  disabled={isImporting}
+                  className="w-4 h-4 rounded accent-primary-500"
+                />
+                <span className="text-sm text-slate-600 font-medium">
+                  Completer l'import actif
+                </span>
+                <span className="text-xs text-slate-400">
+                  (fusionner les donnees avec l'import existant)
+                </span>
+              </label>
+            )}
+
             <button
               onClick={handleBrowse}
               disabled={isImporting}
               className="w-full px-4 py-3 rounded-xl bg-primary-500 text-white font-semibold hover:bg-primary-600 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_3px_6px_rgba(0,0,0,0.10),0_2px_4px_rgba(0,0,0,0.06)] hover:shadow-[0_10px_20px_rgba(0,0,0,0.10),0_3px_6px_rgba(0,0,0,0.06)] active:shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)]"
             >
               <Upload className="w-5 h-5" />
-              {isImporting ? 'Import en cours...' : 'Importer un fichier CSV'}
+              {isImporting
+                ? 'Import en cours...'
+                : mergeMode
+                  ? 'Completer l\'import actif'
+                  : 'Importer un fichier CSV'}
             </button>
 
             {hasResult && result && (

@@ -8,3 +8,4 @@ pub mod export;
 pub mod config;
 pub mod search;
 pub mod analytics;
+pub mod delais;

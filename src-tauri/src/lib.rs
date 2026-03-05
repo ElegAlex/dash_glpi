@@ -156,6 +156,8 @@ pub fn run() {
             commands::analytics::predict_workload,
             // Dashboard KPI
             commands::dashboard::get_dashboard_kpi,
+            // Délais prise en charge
+            commands::delais::get_delais_kpi,
         ])
         .run(tauri::generate_context!());
 

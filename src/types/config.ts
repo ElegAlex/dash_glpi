@@ -10,6 +10,7 @@ export interface AppConfig {
   seuilSimilariteDoublons: number;
   statutsVivants: string[];
   statutsTermines: string[];
+  taillePoliceAxes: number;
 }
 
 export interface ImportHistory {

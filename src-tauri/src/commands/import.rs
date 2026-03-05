@@ -128,9 +128,11 @@ pub struct TechHistoryPeriod {
 pub async fn import_csv(
     state: tauri::State<'_, AppState>,
     path: String,
+    merge: Option<bool>,
     on_progress: Channel<ImportEvent>,
 ) -> Result<ImportResult, String> {
     let start = Instant::now();
+    let merge = merge.unwrap_or(false);
 
     // Extract filename from path
     let filename = Path::new(&path)
@@ -174,63 +176,102 @@ pub async fn import_csv(
         crate::analyzer::classifier::classify_ticket(ticket, &config);
     }
 
-    let vivants_count = tickets.iter().filter(|t| t.est_vivant).count();
-    let termines_count = tickets.len() - vivants_count;
     let total_tickets = tickets.len();
     let skipped_rows = parse_output.skipped_rows;
-    let total_rows = parse_output.total_rows_processed;
     let parse_duration_ms = parse_output.parse_duration_ms;
 
-    // Date range derived from ticket opening dates
-    let date_range_from = tickets
-        .iter()
-        .map(|t| t.date_ouverture.as_str())
-        .min()
-        .map(str::to_string);
-    let date_range_to = tickets
-        .iter()
-        .map(|t| t.date_ouverture.as_str())
-        .max()
-        .map(str::to_string);
+    // Persist: either merge into active import or create a new one
+    let import_id = if merge {
+        // Merge mode: insert tickets into existing active import
+        let active_id = state
+            .db(|conn| crate::db::queries::get_active_import_id(conn))
+            .map_err(|_| "Aucun import actif pour la fusion. Importez d'abord un fichier.".to_string())?;
 
-    // Persist: deactivate previous imports, insert new import record, bulk-insert tickets
-    let import_id = state.db_mut(|conn| {
-        conn.execute("UPDATE imports SET is_active = 0", [])?;
+        state.db_mut(|conn| {
+            crate::db::insert::bulk_insert_tickets(conn, active_id, &tickets)?;
 
-        let detected_json = serde_json::to_string(&parse_output.detected_columns)
-            .unwrap_or_else(|_| "[]".to_string());
-        let statuts_json = serde_json::to_string(&parse_output.unique_statuts)
-            .unwrap_or_else(|_| "[]".to_string());
-        let types_json = serde_json::to_string(&parse_output.unique_types)
-            .unwrap_or_else(|_| "[]".to_string());
+            // Recalculate import metadata from the merged ticket set
+            conn.execute(
+                "UPDATE imports SET
+                    parsed_rows = (SELECT COUNT(*) FROM tickets WHERE import_id = ?1),
+                    vivants_count = (SELECT COUNT(*) FROM tickets WHERE import_id = ?1 AND est_vivant = 1),
+                    termines_count = (SELECT COUNT(*) FROM tickets WHERE import_id = ?1 AND est_vivant = 0),
+                    date_range_from = (SELECT MIN(date_ouverture) FROM tickets WHERE import_id = ?1),
+                    date_range_to = (SELECT MAX(date_ouverture) FROM tickets WHERE import_id = ?1),
+                    total_rows = (SELECT COUNT(*) FROM tickets WHERE import_id = ?1)
+                WHERE id = ?1",
+                rusqlite::params![active_id],
+            )?;
+            Ok(active_id)
+        })?
+    } else {
+        // Normal mode: deactivate previous imports, create new import record
+        let date_range_from = tickets
+            .iter()
+            .map(|t| t.date_ouverture.as_str())
+            .min()
+            .map(str::to_string);
+        let date_range_to = tickets
+            .iter()
+            .map(|t| t.date_ouverture.as_str())
+            .max()
+            .map(str::to_string);
 
-        conn.execute(
-            "INSERT INTO imports (
-                filename, file_size_bytes, total_rows, parsed_rows, skipped_rows,
-                vivants_count, termines_count, date_range_from, date_range_to,
-                detected_columns, unique_statuts, unique_types, parse_duration_ms, is_active
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, 1)",
-            rusqlite::params![
-                &filename,
-                file_size_bytes,
-                total_rows as i64,
-                total_tickets as i64,
-                skipped_rows as i64,
-                vivants_count as i64,
-                termines_count as i64,
-                date_range_from.as_deref(),
-                date_range_to.as_deref(),
-                detected_json,
-                statuts_json,
-                types_json,
-                parse_duration_ms as i64,
-            ],
+        let total_rows = parse_output.total_rows_processed;
+        let vivants_count = tickets.iter().filter(|t| t.est_vivant).count();
+        let termines_count = tickets.len() - vivants_count;
+
+        state.db_mut(|conn| {
+            conn.execute("UPDATE imports SET is_active = 0", [])?;
+
+            let detected_json = serde_json::to_string(&parse_output.detected_columns)
+                .unwrap_or_else(|_| "[]".to_string());
+            let statuts_json = serde_json::to_string(&parse_output.unique_statuts)
+                .unwrap_or_else(|_| "[]".to_string());
+            let types_json = serde_json::to_string(&parse_output.unique_types)
+                .unwrap_or_else(|_| "[]".to_string());
+
+            conn.execute(
+                "INSERT INTO imports (
+                    filename, file_size_bytes, total_rows, parsed_rows, skipped_rows,
+                    vivants_count, termines_count, date_range_from, date_range_to,
+                    detected_columns, unique_statuts, unique_types, parse_duration_ms, is_active
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, 1)",
+                rusqlite::params![
+                    &filename,
+                    file_size_bytes,
+                    total_rows as i64,
+                    total_tickets as i64,
+                    skipped_rows as i64,
+                    vivants_count as i64,
+                    termines_count as i64,
+                    date_range_from.as_deref(),
+                    date_range_to.as_deref(),
+                    detected_json,
+                    statuts_json,
+                    types_json,
+                    parse_duration_ms as i64,
+                ],
+            )?;
+            let import_id = conn.last_insert_rowid();
+            crate::db::insert::bulk_insert_tickets(conn, import_id, &tickets)?;
+            Ok(import_id)
+        })?
+    };
+
+    // Read final counts from DB (accounts for merge deduplication)
+    let (vivants_count, termines_count) = state.db(|conn| {
+        let v: i64 = conn.query_row(
+            "SELECT vivants_count FROM imports WHERE id = ?1",
+            rusqlite::params![import_id],
+            |row| row.get(0),
         )?;
-        let import_id = conn.last_insert_rowid();
-
-        crate::db::insert::bulk_insert_tickets(conn, import_id, &tickets)?;
-
-        Ok(import_id)
+        let t: i64 = conn.query_row(
+            "SELECT termines_count FROM imports WHERE id = ?1",
+            rusqlite::params![import_id],
+            |row| row.get(0),
+        )?;
+        Ok((v as usize, t as usize))
     })?;
 
     let duration_ms = start.elapsed().as_millis() as u64;
@@ -254,10 +295,22 @@ pub async fn import_csv(
             },
         );
     }
+    if merge {
+        warnings.insert(
+            0,
+            crate::parser::types::ParseWarning {
+                line: 0,
+                message: format!(
+                    "Fusion réussie : {} tickets ajoutés/mis à jour dans l'import actif",
+                    total_tickets
+                ),
+            },
+        );
+    }
 
     Ok(ImportResult {
         import_id,
-        total_tickets,
+        total_tickets: vivants_count + termines_count,
         vivants_count,
         termines_count,
         skipped_rows,
