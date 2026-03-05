@@ -8,6 +8,7 @@ import CategoriesPage from "./pages/CategoriesPage";
 import BilanPage from "./pages/BilanPage";
 import DelaisPage from "./pages/DelaisPage";
 import MiningPage from "./pages/MiningPage";
+import SuiviPage from "./pages/SuiviPage";
 import SettingsPage from "./pages/SettingsPage";
 
 function App() {
@@ -20,7 +21,8 @@ function App() {
         <Route path="/import" element={<Navigate to="/data" replace />} />
         <Route path="/export" element={<Navigate to="/data" replace />} />
         <Route path="/stock" element={<StockPage />} />
-        <Route path="/stock/:technicien" element={<TechnicianDetail />} />
+        <Route path="/suivi" element={<SuiviPage />} />
+        <Route path="/suivi/:technicien" element={<TechnicianDetail />} />
         <Route path="/categories" element={<CategoriesPage />} />
         <Route path="/bilan" element={<BilanPage />} />
         <Route path="/delais" element={<DelaisPage />} />

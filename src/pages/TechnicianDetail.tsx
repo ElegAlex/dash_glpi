@@ -370,10 +370,10 @@ function TechnicianDetail() {
         {/* Breadcrumb */}
         <nav className="flex items-center gap-1 text-sm text-slate-500 mb-2">
           <button
-            onClick={() => navigate('/stock')}
+            onClick={() => navigate('/suivi')}
             className="hover:text-primary-500 font-medium transition-colors"
           >
-            Stock
+            Suivi
           </button>
           <span className="text-slate-400">/</span>
           <span className="font-medium text-slate-800">{decodedTech || '...'}</span>
@@ -404,7 +404,7 @@ function TechnicianDetail() {
               {exporting ? 'Export...' : "Exporter le plan d'action"}
             </button>
             <button
-              onClick={() => navigate('/stock')}
+              onClick={() => navigate('/suivi')}
               className="rounded-xl bg-white px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 transition-colors shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)]"
             >
               Retour

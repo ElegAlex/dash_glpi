@@ -43,7 +43,7 @@ export function TechnicianTable({ data }: TechnicianTableProps) {
         cell: (info) => (
           <button
             className="text-primary-500 hover:underline font-medium text-left"
-            onClick={() => navigate(`/stock/${encodeURIComponent(info.getValue())}`)}
+            onClick={() => navigate(`/suivi/${encodeURIComponent(info.getValue())}`)}
           >
             {info.getValue()}
           </button>

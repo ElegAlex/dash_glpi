@@ -52,7 +52,7 @@ export function MttrComparatifTable({ data }: MttrComparatifTableProps) {
               <td className="px-5 py-3 text-sm font-[Source_Sans_3]">
                 <button
                   className="text-[#0C419A] hover:underline font-medium text-left"
-                  onClick={() => navigate(`/stock/${encodeURIComponent(row.label)}`)}
+                  onClick={() => navigate(`/suivi/${encodeURIComponent(row.label)}`)}
                 >
                   {row.label}
                 </button>
