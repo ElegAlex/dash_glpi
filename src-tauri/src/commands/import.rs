@@ -257,6 +257,47 @@ pub async fn get_import_history(
     state.db(|conn| crate::db::queries::get_import_history(conn))
 }
 
+// ─── Suivi individuel technicien ─────────────────────────────────────────────
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TechHistory {
+    pub kpi: TechHistoryKpi,
+    pub periodes: Vec<TechHistoryPeriod>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TechHistoryKpi {
+    pub total_entrants: usize,
+    pub total_sortants: usize,
+    pub stock_actuel: usize,
+    pub mttr_jours: Option<f64>,
+    pub incidents: usize,
+    pub demandes: usize,
+    pub age_moyen_jours: f64,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TechHistoryPeriod {
+    pub period_key: String,
+    pub entrants: usize,
+    pub sortants: usize,
+    pub stock_cumule: usize,
+    pub mttr_jours: Option<f64>,
+}
+
+#[tauri::command]
+pub async fn get_technician_history(
+    state: tauri::State<'_, AppState>,
+    technicien: String,
+    granularity: Option<String>,
+) -> Result<TechHistory, String> {
+    let gran = granularity.as_deref().unwrap_or("month");
+    state.db(|conn| crate::db::queries::get_technician_history(conn, &technicien, gran))
+}
+
 #[tauri::command]
 pub async fn set_active_import(
     state: tauri::State<'_, AppState>,
