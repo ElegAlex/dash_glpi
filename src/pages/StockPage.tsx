@@ -289,7 +289,7 @@ function StockPage() {
   }, [filters]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    catHook.execute('get_categories_tree', { request: { scope: 'all' } });
+    catHook.execute('get_categories_tree', { request: { scope: 'vivants' } });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Extract unique filter values from technician data

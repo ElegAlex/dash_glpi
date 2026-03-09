@@ -1,4 +1,4 @@
-import { Activity, CheckCircle, Clock, AlertTriangle, UserX } from 'lucide-react';
+import { Activity, Clock, Timer, AlertTriangle, UserX } from 'lucide-react';
 import { KpiCard } from '../shared/KpiCard';
 import type { StockOverview } from '../../types/kpi';
 
@@ -19,17 +19,18 @@ export function KpiCards({ overview, onUnassignedClick }: KpiCardsProps) {
         accentColor="#0C419A"
       />
       <KpiCard
-        label="Termines"
-        value={overview.totalTermines}
-        icon={<CheckCircle size={18} className="text-emerald-600" />}
-        accentColor="#2E7D32"
-      />
-      <KpiCard
         label="Non assignes"
         value={overview.nonAssignes}
         icon={<UserX size={18} className="text-orange-600" />}
         accentColor="#E65100"
         onClick={onUnassignedClick}
+      />
+      <KpiCard
+        label="Age moyen"
+        value={overview.ageMoyenJours}
+        format="days"
+        icon={<Timer size={18} className="text-blue-600" />}
+        accentColor="#1565C0"
       />
       <KpiCard
         label="Age median"
