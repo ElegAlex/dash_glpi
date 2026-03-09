@@ -32,6 +32,8 @@ pub struct ClusterInfo {
     /// Indices des documents dans ce cluster
     pub doc_indices: Vec<usize>,
     pub size: usize,
+    /// Score silhouette moyen pour ce cluster
+    pub silhouette: f64,
 }
 
 // ─────────────────────────────────────────────
@@ -154,6 +156,75 @@ fn silhouette_score(data: &Array2<f64>, labels: &[usize]) -> f64 {
     total / n as f64
 }
 
+/// Calcule le score silhouette moyen par cluster.
+fn per_cluster_silhouette(data: &Array2<f64>, labels: &[usize], k: usize) -> Vec<f64> {
+    let n = data.nrows();
+    if n <= 1 || k <= 1 {
+        return vec![0.0; k];
+    }
+
+    let mut cluster_totals = vec![0.0f64; k];
+    let mut cluster_counts = vec![0usize; k];
+
+    for i in 0..n {
+        let cluster_i = labels[i];
+
+        let same_indices: Vec<usize> = (0..n)
+            .filter(|&j| j != i && labels[j] == cluster_i)
+            .collect();
+
+        let a = if same_indices.is_empty() {
+            0.0
+        } else {
+            same_indices
+                .iter()
+                .map(|&j| euclidean_dist(data.row(i), data.row(j)))
+                .sum::<f64>()
+                / same_indices.len() as f64
+        };
+
+        let mut min_b = f64::INFINITY;
+        for c in 0..k {
+            if c == cluster_i {
+                continue;
+            }
+            let other: Vec<usize> = (0..n).filter(|&j| labels[j] == c).collect();
+            if other.is_empty() {
+                continue;
+            }
+            let mean = other
+                .iter()
+                .map(|&j| euclidean_dist(data.row(i), data.row(j)))
+                .sum::<f64>()
+                / other.len() as f64;
+            if mean < min_b {
+                min_b = mean;
+            }
+        }
+
+        let s = if min_b == f64::INFINITY || (a == 0.0 && min_b == 0.0) {
+            0.0
+        } else {
+            (min_b - a) / a.max(min_b)
+        };
+
+        if cluster_i < k {
+            cluster_totals[cluster_i] += s;
+            cluster_counts[cluster_i] += 1;
+        }
+    }
+
+    (0..k)
+        .map(|c| {
+            if cluster_counts[c] > 0 {
+                cluster_totals[c] / cluster_counts[c] as f64
+            } else {
+                0.0
+            }
+        })
+        .collect()
+}
+
 // ─────────────────────────────────────────────
 // Fonction principale
 // ─────────────────────────────────────────────
@@ -223,11 +294,12 @@ pub fn run_kmeans(
     let labels_array: Array1<usize> = final_model.predict(&dense);
     let labels: Vec<usize> = labels_array.iter().copied().collect();
 
-    // 7. Labelliser les clusters
-    let clusters = build_cluster_infos(k_optimal, &labels, &centroids, vocabulary, n_docs);
-
-    // 8. Calculer le score silhouette
+    // 7. Calculer le score silhouette global et par cluster
     let silhouette = silhouette_score(&dense, &labels);
+    let per_sil = per_cluster_silhouette(&dense, &labels, k_optimal);
+
+    // 8. Labelliser les clusters
+    let clusters = build_cluster_infos(k_optimal, &labels, &centroids, vocabulary, n_docs, &per_sil);
 
     Ok(ClusteringResult {
         k_optimal,
@@ -275,6 +347,7 @@ fn build_cluster_infos(
     centroids: &Array2<f64>,
     vocabulary: &[String],
     n_docs: usize,
+    per_sil: &[f64],
 ) -> Vec<ClusterInfo> {
     let mut clusters: Vec<ClusterInfo> = (0..k)
         .map(|id| ClusterInfo {
@@ -283,6 +356,7 @@ fn build_cluster_infos(
             top_keywords: Vec::new(),
             doc_indices: Vec::new(),
             size: 0,
+            silhouette: per_sil.get(id).copied().unwrap_or(0.0),
         })
         .collect();
 

@@ -78,6 +78,10 @@ export default function ClusterView({ clusters, silhouetteScore, onClusterClick 
                 ))}
               </div>
 
+              <p className="text-xs text-slate-400 mt-2 leading-relaxed">
+                {cluster.explanation}
+              </p>
+
               {cluster.avgResolutionDays !== null && (
                 <p className="text-xs text-slate-400">
                   Delai moy. resolution :{" "}

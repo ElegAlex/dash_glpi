@@ -80,6 +80,8 @@ pub struct Cluster {
     pub ticket_count: usize,
     pub ticket_ids: Vec<u64>,
     pub avg_resolution_days: Option<f64>,
+    pub explanation: String,
+    pub silhouette: f64,
 }
 
 #[derive(Serialize)]
@@ -437,6 +439,23 @@ pub async fn get_clusters(
                     .iter()
                     .map(|kw| resolve_stem(kw, &stem_map))
                     .collect();
+
+                let coherence_label = if ci.silhouette >= 0.5 {
+                    "forte"
+                } else if ci.silhouette >= 0.25 {
+                    "moyenne"
+                } else {
+                    "faible"
+                };
+
+                let explanation = format!(
+                    "Ce cluster regroupe {} tickets autour de : {}. Coherence interne : {:.2} ({}).",
+                    ci.size,
+                    resolved_keywords.iter().take(3).cloned().collect::<Vec<_>>().join(", "),
+                    ci.silhouette,
+                    coherence_label
+                );
+
                 Cluster {
                     id: ci.id,
                     label: ci.label.clone(),
@@ -444,6 +463,8 @@ pub async fn get_clusters(
                     ticket_count: ci.size,
                     ticket_ids: cluster_ticket_ids,
                     avg_resolution_days: None,
+                    explanation,
+                    silhouette: ci.silhouette,
                 }
             })
             .collect();

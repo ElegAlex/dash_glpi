@@ -47,6 +47,8 @@ export interface ClusterInfo {
   ticketCount: number;
   ticketIds: number[];
   avgResolutionDays: number | null;
+  explanation: string;
+  silhouette: number;
 }
 
 // ── Cluster Detail ──

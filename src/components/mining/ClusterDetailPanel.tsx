@@ -9,7 +9,7 @@ import {
   type SortingState,
 } from '@tanstack/react-table';
 import { useState } from 'react';
-import { X, ChevronUp, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { X, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Info } from 'lucide-react';
 import { useECharts } from '../../hooks/useECharts';
 import { Card } from '../shared/Card';
 import type { ClusterDetail, ClusterTicket, ClusterInfo } from '../../types/mining';
@@ -347,6 +347,30 @@ export default function ClusterDetailPanel({ cluster, detail, loading, error, on
 
           {!loading && !error && detail && (
             <>
+              {/* Explanation */}
+              <section className="flex items-start gap-3 rounded-2xl bg-primary-50/50 p-4">
+                <Info size={18} className="text-primary-500 shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="text-sm font-semibold font-[DM_Sans] text-slate-700 mb-1">
+                    Pourquoi ce cluster ?
+                  </h3>
+                  <p className="text-sm text-slate-600 leading-relaxed">
+                    {cluster.explanation}
+                  </p>
+                  <div className="mt-2">
+                    <span className={`rounded-lg px-2 py-0.5 text-xs font-semibold ${
+                      cluster.silhouette >= 0.5
+                        ? "bg-emerald-50 text-emerald-700"
+                        : cluster.silhouette >= 0.25
+                          ? "bg-amber-50 text-amber-800"
+                          : "bg-red-50 text-red-700"
+                    }`}>
+                      Coherence : {cluster.silhouette.toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              </section>
+
               {/* 1. Profil */}
               <section>
                 <h3 className="text-lg font-semibold font-[DM_Sans] text-slate-700 mb-3">Profil du cluster</h3>
