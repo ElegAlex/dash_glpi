@@ -5,6 +5,7 @@ import { useInvoke } from "../hooks/useInvoke";
 import KeywordList from "../components/mining/KeywordList";
 import CooccurrenceNetwork from "../components/mining/CooccurrenceNetwork";
 import DrillDownPanel from "../components/mining/DrillDownPanel";
+import MindMapPanel from "../components/mining/MindMapPanel";
 import { Card } from "../components/shared/Card";
 import { KpiCard } from "../components/shared/KpiCard";
 import type {
@@ -59,6 +60,7 @@ function KnowledgeBasePage() {
   const [includeResolved, setIncludeResolved] = useState(true);
   const [drillDown, setDrillDown] = useState<{ title: string; tickets: TicketRef[] } | null>(null);
   const [excludedWords, setExcludedWords] = useState<Set<string>>(new Set());
+  const [mindMapWord, setMindMapWord] = useState<string | null>(null);
 
   const handleExclude = async (word: string) => {
     await invoke("add_user_stopwords", { words: [word] });
@@ -266,6 +268,7 @@ function KnowledgeBasePage() {
                       const tickets = result.ticketMap[word] ?? [];
                       setDrillDown({ title: `Tickets contenant "${word}"`, tickets });
                     }}
+                    onMindMap={(word) => setMindMapWord(word)}
                     onExclude={handleExclude}
                   />
                 )}
@@ -354,6 +357,16 @@ function KnowledgeBasePage() {
           title={drillDown.title}
           tickets={drillDown.tickets}
           onClose={() => setDrillDown(null)}
+        />
+      )}
+
+      {mindMapWord && (
+        <MindMapPanel
+          word={mindMapWord}
+          corpus="solutions"
+          includeResolved={includeResolved}
+          onClose={() => setMindMapWord(null)}
+          onNavigate={(w) => setMindMapWord(w)}
         />
       )}
     </div>

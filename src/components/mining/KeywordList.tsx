@@ -1,4 +1,4 @@
-import { X } from "lucide-react";
+import { X, Share2 } from "lucide-react";
 import type { KeywordFrequency } from "../../types/mining";
 
 interface KeywordListProps {
@@ -7,6 +7,7 @@ interface KeywordListProps {
   maxItems?: number;
   onKeywordClick?: (word: string) => void;
   onExclude?: (word: string) => void;
+  onMindMap?: (word: string) => void;
 }
 
 export default function KeywordList({
@@ -15,6 +16,7 @@ export default function KeywordList({
   maxItems = 20,
   onKeywordClick,
   onExclude,
+  onMindMap,
 }: KeywordListProps) {
   const items = keywords.slice(0, maxItems);
   const maxScore = items.length > 0 ? Math.max(...items.map((k) => k.tfidfScore)) : 1;
@@ -54,6 +56,19 @@ export default function KeywordList({
                   <span className="shrink-0 text-xs text-slate-400">
                     {kw.docFrequency} doc{kw.docFrequency > 1 ? "s" : ""}
                   </span>
+                  {onMindMap && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onMindMap(kw.word);
+                      }}
+                      className="shrink-0 inline-flex items-center gap-1 rounded-lg px-1.5 py-0.5 text-[11px] font-medium text-primary-500 bg-primary-50 hover:bg-primary-100 transition-colors"
+                      title={`Carte mentale "${kw.word}"`}
+                    >
+                      <Share2 size={12} />
+                      Map
+                    </button>
+                  )}
                   {onExclude && (
                     <button
                       onClick={(e) => {

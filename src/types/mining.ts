@@ -146,23 +146,23 @@ export interface CooccurrenceResult {
 // ── Mind Map ──
 export interface MindMapRequest {
   word: string;
+  corpus?: string;
   includeResolved?: boolean;
   maxBranches?: number;
   maxLeaves?: number;
+  maxDepth?: number;
+}
+
+export interface MindMapNode {
+  word: string;
+  weight: number;
+  ticketCount: number;
+  children: MindMapNode[];
 }
 
 export interface MindMapResult {
   root: string;
-  branches: MindMapBranch[];
-}
-
-export interface MindMapBranch {
-  word: string;
-  weight: number;
-  children: MindMapLeaf[];
-}
-
-export interface MindMapLeaf {
-  word: string;
-  weight: number;
+  rootTicketCount: number;
+  branches: MindMapNode[];
+  ticketMap: Record<string, TicketRef[]>;
 }

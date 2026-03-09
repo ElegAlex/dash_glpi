@@ -27,7 +27,7 @@ type MainTab = "keywords" | "graph" | "clusters";
 
 const CORPUS_LABELS: Record<Corpus, string> = {
   titres: "Titres",
-  suivis: "Suivis",
+  suivis: "Description",
 };
 
 const SCOPE_LABELS: Record<Scope, string> = {
@@ -99,7 +99,7 @@ function MiningPage() {
   };
 
   const handleCluster = () => {
-    clusterHook.execute("get_clusters", { corpus: "titres", nClusters: 0, vivantsOnly: clusterVivants });
+    clusterHook.execute("get_clusters", { corpus, nClusters: 0, vivantsOnly: clusterVivants });
   };
 
   const handleClusterClick = useCallback((cluster: ClusterInfo) => {
@@ -109,6 +109,7 @@ function MiningPage() {
 
   const handleCooccurrence = () => {
     const request: CooccurrenceRequest = {
+      corpus,
       topNNodes: 80,
       maxEdges: 200,
       includeResolved,
@@ -124,6 +125,7 @@ function MiningPage() {
   useEffect(() => {
     if (coocLoaded.current) {
       const request: CooccurrenceRequest = {
+        corpus,
         topNNodes: 80,
         maxEdges: 200,
         includeResolved,
@@ -139,7 +141,7 @@ function MiningPage() {
   }, [clusterHook.data]);
   useEffect(() => {
     if (clusterLoaded.current) {
-      clusterHook.execute("get_clusters", { corpus: "titres", nClusters: 0, vivantsOnly: clusterVivants });
+      clusterHook.execute("get_clusters", { corpus, nClusters: 0, vivantsOnly: clusterVivants });
     }
   }, [clusterVivants]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -181,8 +183,8 @@ function MiningPage() {
       </header>
 
       <div className="px-8 pb-8 pt-6 space-y-6">
-        {/* Main tabs */}
-        <div className="animate-fade-slide-up">
+        {/* Main tabs + corpus toggle */}
+        <div className="animate-fade-slide-up flex items-center gap-4">
           <div className="bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)] overflow-hidden">
             <div className="flex gap-0">
               {MAIN_TABS.map(({ key, label, icon }) => (
@@ -201,6 +203,23 @@ function MiningPage() {
               ))}
             </div>
           </div>
+
+          {/* Corpus toggle — global, applies to all tabs */}
+          <div className="flex gap-1 bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)] p-1">
+            {(Object.keys(CORPUS_LABELS) as Corpus[]).map((c) => (
+              <button
+                key={c}
+                onClick={() => setCorpus(c)}
+                className={`px-4 py-2 text-sm rounded-xl transition-all duration-150 ${
+                  corpus === c
+                    ? "bg-primary-500 text-white font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)]"
+                    : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                {CORPUS_LABELS[c]}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Tab: Mots-cles */}
@@ -208,23 +227,6 @@ function MiningPage() {
           <div className="space-y-6">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div className="flex flex-wrap items-center gap-6">
-                {/* Corpus sub-tabs */}
-                <div className="flex gap-1 bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)] p-1">
-                  {(Object.keys(CORPUS_LABELS) as Corpus[]).map((c) => (
-                    <button
-                      key={c}
-                      onClick={() => setCorpus(c)}
-                      className={`px-4 py-2 text-sm rounded-xl transition-all duration-150 ${
-                        corpus === c
-                          ? "bg-primary-500 text-white font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)]"
-                          : "text-slate-500 hover:text-slate-800"
-                      }`}
-                    >
-                      {CORPUS_LABELS[c]}
-                    </button>
-                  ))}
-                </div>
-
                 {/* Scope sub-tabs */}
                 <div className="flex gap-1 bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)] p-1">
                   {(Object.keys(SCOPE_LABELS) as Scope[]).map((s) => (
@@ -316,7 +318,12 @@ function MiningPage() {
                     keywords={filteredKeywords}
                     title="Mots-cles extraits"
                     maxItems={30}
-                    onKeywordClick={(word) => setMindMapWord(word)}
+                    onKeywordClick={(word) => {
+                      if (!result) return;
+                      const tickets = result.ticketMap[word] ?? [];
+                      setDrillDown({ title: `Tickets contenant "${word}"`, tickets });
+                    }}
+                    onMindMap={(word) => setMindMapWord(word)}
                     onExclude={handleExclude}
                   />
                 )}
@@ -473,6 +480,7 @@ function MiningPage() {
       {mindMapWord && (
         <MindMapPanel
           word={mindMapWord}
+          corpus={corpus}
           includeResolved={includeResolved}
           onClose={() => setMindMapWord(null)}
           onNavigate={(w) => setMindMapWord(w)}

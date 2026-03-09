@@ -365,7 +365,7 @@ pub async fn get_clusters(
     n_clusters: usize,
     vivants_only: Option<bool>,
 ) -> Result<ClusterResult, String> {
-    let _ = corpus; // corpus loaded from DB
+    let text_col = text_column_for_corpus(&corpus);
     let vivant_clause = if vivants_only.unwrap_or(true) {
         " AND est_vivant = 1"
     } else {
@@ -378,8 +378,8 @@ pub async fn get_clusters(
         let import_id = get_active_import(conn)?;
 
         let sql = format!(
-            "SELECT id, titre FROM tickets WHERE import_id = ?1{}",
-            vivant_clause
+            "SELECT id, {} FROM tickets WHERE import_id = ?1{}",
+            text_col, vivant_clause
         );
         let mut stmt = conn
             .prepare(&sql)
@@ -391,15 +391,15 @@ pub async fn get_clusters(
         let rows = stmt
             .query_map([import_id], |row| {
                 let id: i64 = row.get(0)?;
-                let titre: String = row.get(1)?;
-                Ok((id, titre))
+                let text: String = row.get::<_, Option<String>>(1)?.unwrap_or_default();
+                Ok((id, text))
             })
             .map_err(|e| format!("SQL query: {e}"))?;
 
         for row in rows {
-            let (id, titre) = row.map_err(|e| format!("SQL row: {e}"))?;
+            let (id, text) = row.map_err(|e| format!("SQL row: {e}"))?;
             ticket_ids.push(id as u64);
-            texts.push(titre);
+            texts.push(text);
         }
 
         let mut tech_stmt = conn
@@ -1011,7 +1011,7 @@ pub struct CooccurrenceEdgeIpc {
     pub weight: usize,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct TicketRef {
     pub id: u64,
@@ -1199,31 +1199,29 @@ pub async fn get_cooccurrence_network(
 #[serde(rename_all = "camelCase")]
 pub struct MindMapRequest {
     pub word: String,
+    pub corpus: Option<String>,
     pub include_resolved: Option<bool>,
     pub max_branches: Option<usize>,
     pub max_leaves: Option<usize>,
+    pub max_depth: Option<usize>,
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MindMapResult {
     pub root: String,
-    pub branches: Vec<MindMapBranch>,
+    pub root_ticket_count: usize,
+    pub branches: Vec<MindMapNode>,
+    pub ticket_map: HashMap<String, Vec<TicketRef>>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
-pub struct MindMapBranch {
+pub struct MindMapNode {
     pub word: String,
     pub weight: usize,
-    pub children: Vec<MindMapLeaf>,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct MindMapLeaf {
-    pub word: String,
-    pub weight: usize,
+    pub ticket_count: usize,
+    pub children: Vec<MindMapNode>,
 }
 
 // ── User Stopwords ──────────────────────────────────────────────────────────
@@ -1287,24 +1285,34 @@ pub async fn get_cooccurrence_mindmap(
     state: tauri::State<'_, AppState>,
     request: MindMapRequest,
 ) -> Result<MindMapResult, String> {
+    let text_col = text_column_for_corpus(request.corpus.as_deref().unwrap_or("titres"));
     let include_resolved = request.include_resolved.unwrap_or(false);
-    let max_branches = request.max_branches.unwrap_or(15);
+    let max_branches = request.max_branches.unwrap_or(12);
     let max_leaves = request.max_leaves.unwrap_or(5);
+    let max_depth = request.max_depth.unwrap_or(5).min(5);
     let target_word = request.word.to_lowercase();
 
     let vivant_clause = if include_resolved { "" } else { " AND est_vivant = 1" };
 
-    let (texts, technician_names, user_stopwords) = {
+    let (ticket_rows, technician_names, user_stopwords) = {
         let guard = state.db.lock().map_err(|e| format!("Lock error: {e}"))?;
         let conn = guard.as_ref().ok_or("Base de donnees non initialisee")?;
         let import_id = get_active_import(conn)?;
 
-        let sql = format!("SELECT titre FROM tickets WHERE import_id = ?1{}", vivant_clause);
+        let sql = format!(
+            "SELECT rowid, titre, {} FROM tickets WHERE import_id = ?1{}",
+            text_col, vivant_clause
+        );
         let mut stmt = conn.prepare(&sql).map_err(|e| format!("SQL prepare: {e}"))?;
-        let texts: Vec<String> = stmt
-            .query_map([import_id], |row| row.get(0))
+        let ticket_rows: Vec<(u64, String, String)> = stmt
+            .query_map([import_id], |row| {
+                let id: u64 = row.get(0)?;
+                let titre: String = row.get(1)?;
+                let text: String = row.get::<_, Option<String>>(2)?.unwrap_or_default();
+                Ok((id, titre, text))
+            })
             .map_err(|e| format!("SQL query: {e}"))?
-            .collect::<Result<Vec<String>, _>>()
+            .collect::<Result<Vec<_>, _>>()
             .map_err(|e| format!("SQL collect: {e}"))?;
 
         let mut tech_stmt = conn
@@ -1324,15 +1332,21 @@ pub async fn get_cooccurrence_mindmap(
             .collect::<Result<Vec<String>, _>>()
             .map_err(|e| format!("SQL collect sw: {e}"))?;
 
-        (texts, technician_names, user_stopwords)
+        (ticket_rows, technician_names, user_stopwords)
     };
 
     let result = tokio::task::spawn_blocking(move || -> Result<MindMapResult, String> {
+        use std::collections::HashSet;
+
         let mut filter = StopWordFilter::new();
         filter.add_technician_names(&technician_names);
         for w in &user_stopwords {
             filter.single_words.insert(w.clone());
         }
+
+        // Separate ticket IDs, titles, and analysis texts; keep index correspondence
+        let doc_ticket_ids: Vec<u64> = ticket_rows.iter().map(|(id, _, _)| *id).collect();
+        let texts: Vec<&str> = ticket_rows.iter().map(|(_, _, text)| text.as_str()).collect();
 
         let mut all_pairs: Vec<(String, String)> = Vec::new();
         let tokenized: Vec<Vec<String>> = texts
@@ -1348,6 +1362,20 @@ pub async fn get_cooccurrence_mindmap(
         let stem_map = build_stem_mapping(&all_pairs);
         let tfidf = build_tfidf_matrix(&tokenized, 2);
 
+        // Build ticket_data lookup: ticket_id → TicketRef (always use titre for display)
+        let ticket_data: HashMap<u64, TicketRef> = ticket_rows
+            .iter()
+            .map(|(id, titre, _)| (*id, TicketRef { id: *id, titre: titre.clone() }))
+            .collect();
+
+        // Build inverted index: term_idx → Set<doc_indices>
+        let mut term_docs: Vec<HashSet<usize>> = vec![HashSet::new(); tfidf.vocabulary.len()];
+        for (doc_idx, row) in tfidf.matrix.outer_iterator().enumerate() {
+            for &term_idx in row.indices() {
+                term_docs[term_idx].insert(doc_idx);
+            }
+        }
+
         // Find the stem for the target word
         let target_stem = stem_map
             .iter()
@@ -1360,69 +1388,138 @@ pub async fn get_cooccurrence_mindmap(
             None => return Err(format!("Mot '{}' non trouve dans le vocabulaire", target_word)),
         };
 
-        // Build co-occurrence map: terms that co-occur with root
-        let mut cooc_with_root: HashMap<usize, usize> = HashMap::new();
-        for row in tfidf.matrix.outer_iterator() {
-            let terms: Vec<usize> = row.indices().iter().copied().collect();
-            if !terms.contains(&root_idx) { continue; }
-            for &t in &terms {
-                if t != root_idx {
-                    *cooc_with_root.entry(t).or_insert(0) += 1;
-                }
-            }
-        }
+        let root_doc_set = &term_docs[root_idx];
+        let root_ticket_count = root_doc_set.len();
 
-        // Sort by weight, take top branches
-        let mut branch_candidates: Vec<(usize, usize)> = cooc_with_root
+        let mut ticket_map: HashMap<String, Vec<TicketRef>> = HashMap::new();
+
+        // Store root tickets
+        let root_word = resolve_stem(&target_stem, &stem_map);
+        let root_tickets: Vec<TicketRef> = root_doc_set
             .iter()
-            .filter(|(_, &w)| w >= 2)
-            .map(|(&idx, &w)| (idx, w))
+            .filter_map(|&di| ticket_data.get(&doc_ticket_ids[di]).cloned())
             .collect();
-        branch_candidates.sort_by(|a, b| b.1.cmp(&a.1));
-        branch_candidates.truncate(max_branches);
+        ticket_map.insert(root_word.clone(), root_tickets);
 
-        let branch_set: std::collections::HashSet<usize> =
-            branch_candidates.iter().map(|(idx, _)| *idx).collect();
+        // Recursive helper to build children
+        fn build_children(
+            ancestor_indices: &[usize],
+            ancestor_doc_set: &HashSet<usize>,
+            term_docs: &[HashSet<usize>],
+            vocabulary: &[String],
+            stem_map: &HashMap<String, String>,
+            doc_ticket_ids: &[u64],
+            ticket_data: &HashMap<u64, TicketRef>,
+            ticket_map: &mut HashMap<String, Vec<TicketRef>>,
+            ancestor_words: &[String],
+            depth: usize,
+            max_depth: usize,
+            max_children: usize,
+            max_leaves: usize,
+        ) -> Vec<MindMapNode> {
+            if depth > max_depth || ancestor_doc_set.len() < 2 {
+                return Vec::new();
+            }
 
-        // For each branch, find degree-2 co-occurrences (terms in docs containing both root AND branch)
-        let mut branches: Vec<MindMapBranch> = Vec::new();
-        for &(branch_idx, branch_weight) in &branch_candidates {
-            let mut cooc_with_branch: HashMap<usize, usize> = HashMap::new();
-            for row in tfidf.matrix.outer_iterator() {
-                let terms: Vec<usize> = row.indices().iter().copied().collect();
-                if !terms.contains(&root_idx) || !terms.contains(&branch_idx) { continue; }
-                for &t in &terms {
-                    if t != root_idx && t != branch_idx && !branch_set.contains(&t) {
-                        *cooc_with_branch.entry(t).or_insert(0) += 1;
-                    }
+            // depth 1 → max_children (max_branches), depth 2+ → max_leaves with decay
+            let effective_max = if depth == 1 {
+                max_children
+            } else {
+                max_leaves.saturating_sub(depth - 2).max(3)
+            };
+
+            let ancestor_set: HashSet<usize> = ancestor_indices.iter().copied().collect();
+
+            // Count co-occurrences: for each term not in ancestors, how many docs
+            // in ancestor_doc_set also contain this term
+            let mut candidates: Vec<(usize, usize)> = Vec::new();
+            for (term_idx, docs) in term_docs.iter().enumerate() {
+                if ancestor_set.contains(&term_idx) {
+                    continue;
+                }
+                let count = ancestor_doc_set.intersection(docs).count();
+                if count >= 2 {
+                    candidates.push((term_idx, count));
                 }
             }
 
-            let mut leaf_candidates: Vec<(usize, usize)> = cooc_with_branch
-                .into_iter()
-                .filter(|(_, w)| *w >= 2)
-                .collect();
-            leaf_candidates.sort_by(|a, b| b.1.cmp(&a.1));
-            leaf_candidates.truncate(max_leaves);
+            candidates.sort_by(|a, b| b.1.cmp(&a.1));
+            candidates.truncate(effective_max);
 
-            let children: Vec<MindMapLeaf> = leaf_candidates
-                .iter()
-                .map(|&(idx, w)| MindMapLeaf {
-                    word: resolve_stem(&tfidf.vocabulary[idx], &stem_map),
-                    weight: w,
-                })
-                .collect();
+            let mut nodes: Vec<MindMapNode> = Vec::new();
+            for &(child_idx, weight) in &candidates {
+                let child_doc_set: HashSet<usize> = ancestor_doc_set
+                    .intersection(&term_docs[child_idx])
+                    .copied()
+                    .collect();
+                let ticket_count = child_doc_set.len();
 
-            branches.push(MindMapBranch {
-                word: resolve_stem(&tfidf.vocabulary[branch_idx], &stem_map),
-                weight: branch_weight,
-                children,
-            });
+                let child_word = resolve_stem(&vocabulary[child_idx], stem_map);
+
+                // Build chain key: ancestor_words joined by "|" + "|" + child_word
+                let mut chain_words = ancestor_words.to_vec();
+                chain_words.push(child_word.clone());
+                let chain_key = chain_words.join("|");
+
+                // Store tickets for this chain
+                let refs: Vec<TicketRef> = child_doc_set
+                    .iter()
+                    .filter_map(|&di| ticket_data.get(&doc_ticket_ids[di]).cloned())
+                    .collect();
+                ticket_map.insert(chain_key, refs);
+
+                // Recurse deeper
+                let mut child_ancestors = ancestor_indices.to_vec();
+                child_ancestors.push(child_idx);
+
+                let children = build_children(
+                    &child_ancestors,
+                    &child_doc_set,
+                    term_docs,
+                    vocabulary,
+                    stem_map,
+                    doc_ticket_ids,
+                    ticket_data,
+                    ticket_map,
+                    &chain_words,
+                    depth + 1,
+                    max_depth,
+                    max_children,
+                    max_leaves,
+                );
+
+                nodes.push(MindMapNode {
+                    word: child_word,
+                    weight,
+                    ticket_count,
+                    children,
+                });
+            }
+
+            nodes
         }
+
+        let branches = build_children(
+            &[root_idx],
+            root_doc_set,
+            &term_docs,
+            &tfidf.vocabulary,
+            &stem_map,
+            &doc_ticket_ids,
+            &ticket_data,
+            &mut ticket_map,
+            &[root_word.clone()],
+            1,
+            max_depth,
+            max_branches,
+            max_leaves,
+        );
 
         Ok(MindMapResult {
-            root: resolve_stem(&target_stem, &stem_map),
+            root: root_word,
+            root_ticket_count,
             branches,
+            ticket_map,
         })
     })
     .await
