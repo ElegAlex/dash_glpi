@@ -1,13 +1,11 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { Search, GitBranch, AlertTriangle, Copy, FileText, Hash, ChevronDown } from "lucide-react";
+import { Search, GitBranch, FileText, Hash } from "lucide-react";
 import { useInvoke } from "../hooks/useInvoke";
 import KeywordList from "../components/mining/KeywordList";
 import CooccurrenceNetwork from "../components/mining/CooccurrenceNetwork";
 import DrillDownPanel from "../components/mining/DrillDownPanel";
 import ClusterView from "../components/mining/ClusterView";
 import ClusterDetailPanel from "../components/mining/ClusterDetailPanel";
-import AnomalyList from "../components/mining/AnomalyList";
-import DuplicateList from "../components/mining/DuplicateList";
 import { Card } from "../components/shared/Card";
 import { KpiCard } from "../components/shared/KpiCard";
 import type {
@@ -16,8 +14,6 @@ import type {
   ClusterResult,
   ClusterInfo,
   ClusterDetail,
-  AnomalyAlert,
-  DuplicatePair,
   CooccurrenceResult,
   CooccurrenceRequest,
   TicketRef,
@@ -25,7 +21,7 @@ import type {
 
 type Corpus = "titres" | "suivis";
 type Scope = "global" | "group";
-type MainTab = "keywords" | "clusters" | "anomalies" | "duplicates";
+type MainTab = "keywords" | "graph" | "clusters";
 
 const CORPUS_LABELS: Record<Corpus, string> = {
   titres: "Titres",
@@ -39,9 +35,8 @@ const SCOPE_LABELS: Record<Scope, string> = {
 
 const MAIN_TABS: { key: MainTab; label: string; icon: React.ReactNode }[] = [
   { key: "keywords", label: "Mots-cles", icon: <Search size={15} /> },
+  { key: "graph", label: "Explorateur de graphe", icon: <GitBranch size={15} /> },
   { key: "clusters", label: "Clusters", icon: <GitBranch size={15} /> },
-  { key: "anomalies", label: "Anomalies", icon: <AlertTriangle size={15} /> },
-  { key: "duplicates", label: "Doublons", icon: <Copy size={15} /> },
 ];
 
 function EmptyState({ message }: { message: string }) {
@@ -75,8 +70,6 @@ function MiningPage() {
   const [scope, setScope] = useState<Scope>("global");
   const [includeResolved, setIncludeResolved] = useState(false);
   const [clusterVivants, setClusterVivants] = useState(true);
-  const [duplicateVivants, setDuplicateVivants] = useState(true);
-  const [showNetwork, setShowNetwork] = useState(false);
   const [drillDown, setDrillDown] = useState<{ title: string; tickets: TicketRef[] } | null>(null);
   const [selectedCluster, setSelectedCluster] = useState<ClusterInfo | null>(null);
 
@@ -84,8 +77,6 @@ function MiningPage() {
   const coocHook = useInvoke<CooccurrenceResult>();
   const clusterHook = useInvoke<ClusterResult>();
   const clusterDetailHook = useInvoke<ClusterDetail>();
-  const anomalyHook = useInvoke<AnomalyAlert[]>();
-  const duplicateHook = useInvoke<DuplicatePair[]>();
 
   const handleAnalyze = () => {
     const request: TextAnalysisRequest = {
@@ -106,14 +97,6 @@ function MiningPage() {
     setSelectedCluster(cluster);
     clusterDetailHook.execute("get_cluster_detail", { ticketIds: cluster.ticketIds });
   }, [clusterDetailHook]);
-
-  const handleAnomalies = () => {
-    anomalyHook.execute("detect_anomalies", {});
-  };
-
-  const handleDuplicates = () => {
-    duplicateHook.execute("detect_duplicates", { vivantsOnly: duplicateVivants });
-  };
 
   const handleCooccurrence = () => {
     const request: CooccurrenceRequest = {
@@ -139,17 +122,6 @@ function MiningPage() {
       coocHook.execute("get_cooccurrence_network", { request });
     }
   }, [includeResolved]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Auto-refresh duplicates when toggle changes
-  const dupLoaded = useRef(false);
-  useEffect(() => {
-    if (duplicateHook.data) dupLoaded.current = true;
-  }, [duplicateHook.data]);
-  useEffect(() => {
-    if (dupLoaded.current) {
-      duplicateHook.execute("detect_duplicates", { vivantsOnly: duplicateVivants });
-    }
-  }, [duplicateVivants]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-refresh clusters when toggle changes
   const clusterLoaded = useRef(false);
@@ -330,64 +302,15 @@ function MiningPage() {
                 </div>
 
                 {scope === "global" && result.keywords.length > 0 && (
-                  <div className="space-y-5">
-                    <KeywordList
-                      keywords={result.keywords}
-                      title="Mots-cles extraits"
-                      maxItems={30}
-                      onKeywordClick={(word) => {
-                        const tickets = result.ticketMap[word] ?? [];
-                        setDrillDown({ title: `Tickets contenant "${word}"`, tickets });
-                      }}
-                    />
-
-                    <Card className="overflow-hidden">
-                      <div className="flex items-center justify-between">
-                        <button
-                          onClick={() => setShowNetwork(!showNetwork)}
-                          className="flex items-center gap-2 text-left"
-                        >
-                          <h2 className="text-lg font-semibold font-[DM_Sans] text-slate-700">
-                            Reseau de co-occurrences
-                          </h2>
-                          <ChevronDown
-                            size={18}
-                            className={`text-slate-400 transition-transform duration-200 ${
-                              showNetwork ? "rotate-180" : ""
-                            }`}
-                          />
-                        </button>
-                        {showNetwork && (
-                          <button
-                            onClick={handleCooccurrence}
-                            disabled={coocHook.loading}
-                            className="rounded-xl bg-primary-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-600 disabled:opacity-50 transition-colors"
-                          >
-                            {coocHook.loading ? "Generation..." : coocHook.data ? "Recalculer" : "Generer le reseau"}
-                          </button>
-                        )}
-                      </div>
-                      {showNetwork && (
-                        <div className="mt-4">
-                          {coocHook.loading && <Spinner label="Calcul des co-occurrences..." />}
-                          {coocHook.error && <ErrorBanner message={coocHook.error} />}
-                          {coocHook.data && !coocHook.loading && (
-                            <CooccurrenceNetwork
-                              data={coocHook.data}
-                              height={500}
-                              onNodeClick={handleNodeClick}
-                              onEdgeClick={handleEdgeClick}
-                            />
-                          )}
-                          {!coocHook.data && !coocHook.loading && !coocHook.error && (
-                            <p className="py-8 text-center text-sm text-slate-400">
-                              Cliquez sur Generer le reseau pour visualiser les connexions entre mots
-                            </p>
-                          )}
-                        </div>
-                      )}
-                    </Card>
-                  </div>
+                  <KeywordList
+                    keywords={result.keywords}
+                    title="Mots-cles extraits"
+                    maxItems={30}
+                    onKeywordClick={(word) => {
+                      const tickets = result.ticketMap[word] ?? [];
+                      setDrillDown({ title: `Tickets contenant "${word}"`, tickets });
+                    }}
+                  />
                 )}
 
                 {scope === "group" && result.byGroup && result.byGroup.length > 0 && (
@@ -409,6 +332,61 @@ function MiningPage() {
                   </div>
                 )}
               </div>
+            )}
+          </div>
+        )}
+
+        {/* Tab: Explorateur de graphe */}
+        {mainTab === "graph" && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div className="flex gap-1 bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)] p-1">
+                <button
+                  onClick={() => setIncludeResolved(false)}
+                  className={`px-4 py-2 text-sm rounded-xl transition-all duration-150 ${
+                    !includeResolved
+                      ? "bg-primary-500 text-white font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)]"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  En cours
+                </button>
+                <button
+                  onClick={() => setIncludeResolved(true)}
+                  className={`px-4 py-2 text-sm rounded-xl transition-all duration-150 ${
+                    includeResolved
+                      ? "bg-primary-500 text-white font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)]"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  Tous les tickets
+                </button>
+              </div>
+              <button
+                onClick={handleCooccurrence}
+                disabled={coocHook.loading}
+                className="rounded-xl bg-primary-500 px-4 py-2 text-sm font-medium text-white hover:bg-primary-600 disabled:opacity-50 transition-colors shadow-[0_3px_6px_rgba(0,0,0,0.10),0_2px_4px_rgba(0,0,0,0.06)]"
+              >
+                {coocHook.loading ? "Generation..." : coocHook.data ? "Recalculer" : "Generer le reseau"}
+              </button>
+            </div>
+
+            {coocHook.loading && <Spinner label="Calcul des co-occurrences..." />}
+            {coocHook.error && <ErrorBanner message={coocHook.error} />}
+
+            {!coocHook.data && !coocHook.loading && !coocHook.error && (
+              <EmptyState message="Cliquez sur Generer le reseau pour visualiser les connexions entre mots" />
+            )}
+
+            {coocHook.data && !coocHook.loading && (
+              <Card>
+                <CooccurrenceNetwork
+                  data={coocHook.data}
+                  height={600}
+                  onNodeClick={handleNodeClick}
+                  onEdgeClick={handleEdgeClick}
+                />
+              </Card>
             )}
           </div>
         )}
@@ -461,80 +439,6 @@ function MiningPage() {
                 silhouetteScore={clusterHook.data.silhouetteScore}
                 onClusterClick={handleClusterClick}
               />
-            )}
-          </div>
-        )}
-
-        {/* Tab: Anomalies */}
-        {mainTab === "anomalies" && (
-          <div className="space-y-6">
-            <div className="flex justify-end">
-              <button
-                onClick={handleAnomalies}
-                disabled={anomalyHook.loading}
-                className="rounded-xl bg-primary-500 px-4 py-2 text-sm font-medium text-white hover:bg-primary-600 disabled:opacity-50 transition-colors shadow-[0_3px_6px_rgba(0,0,0,0.10),0_2px_4px_rgba(0,0,0,0.06)]"
-              >
-                {anomalyHook.loading ? "Detection en cours..." : "Detecter les anomalies"}
-              </button>
-            </div>
-
-            {anomalyHook.error && <ErrorBanner message={anomalyHook.error} />}
-            {anomalyHook.loading && <Spinner label="Detection d'anomalies en cours..." />}
-
-            {!anomalyHook.loading && !anomalyHook.data && !anomalyHook.error && (
-              <EmptyState message="Cliquez sur Detecter les anomalies pour identifier les tickets hors normes" />
-            )}
-
-            {anomalyHook.data && !anomalyHook.loading && (
-              <AnomalyList anomalies={anomalyHook.data} />
-            )}
-          </div>
-        )}
-
-        {/* Tab: Doublons */}
-        {mainTab === "duplicates" && (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <div className="flex gap-1 bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)] p-1">
-                <button
-                  onClick={() => setDuplicateVivants(true)}
-                  className={`px-4 py-2 text-sm rounded-xl transition-all duration-150 ${
-                    duplicateVivants
-                      ? "bg-primary-500 text-white font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)]"
-                      : "text-slate-500 hover:text-slate-800"
-                  }`}
-                >
-                  En cours
-                </button>
-                <button
-                  onClick={() => setDuplicateVivants(false)}
-                  className={`px-4 py-2 text-sm rounded-xl transition-all duration-150 ${
-                    !duplicateVivants
-                      ? "bg-primary-500 text-white font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)]"
-                      : "text-slate-500 hover:text-slate-800"
-                  }`}
-                >
-                  Tous les tickets
-                </button>
-              </div>
-              <button
-                onClick={handleDuplicates}
-                disabled={duplicateHook.loading}
-                className="rounded-xl bg-primary-500 px-4 py-2 text-sm font-medium text-white hover:bg-primary-600 disabled:opacity-50 transition-colors shadow-[0_3px_6px_rgba(0,0,0,0.10),0_2px_4px_rgba(0,0,0,0.06)]"
-              >
-                {duplicateHook.loading ? "Recherche en cours..." : "Chercher les doublons"}
-              </button>
-            </div>
-
-            {duplicateHook.error && <ErrorBanner message={duplicateHook.error} />}
-            {duplicateHook.loading && <Spinner label="Recherche de doublons en cours..." />}
-
-            {!duplicateHook.loading && !duplicateHook.data && !duplicateHook.error && (
-              <EmptyState message="Cliquez sur Chercher les doublons pour trouver les tickets similaires" />
-            )}
-
-            {duplicateHook.data && !duplicateHook.loading && (
-              <DuplicateList duplicates={duplicateHook.data} />
             )}
           </div>
         )}
