@@ -66,6 +66,26 @@ fn pct(n: usize, total: usize) -> f64 {
     }
 }
 
+/// Calcule (MTTR en jours, médiane en jours) à partir d'une liste de durées positives.
+fn compute_mttr_median(durations: &[f64]) -> (f64, f64) {
+    if durations.is_empty() {
+        return (0.0, 0.0);
+    }
+    let sum: f64 = durations.iter().sum();
+    let mttr = (sum / durations.len() as f64 * 10.0).round() / 10.0;
+
+    let mut sorted = durations.to_vec();
+    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let mid = sorted.len() / 2;
+    let mediane = if sorted.len() % 2 == 0 {
+        ((sorted[mid - 1] + sorted[mid]) / 2.0 * 10.0).round() / 10.0
+    } else {
+        (sorted[mid] * 10.0).round() / 10.0
+    };
+
+    (mttr, mediane)
+}
+
 /// Period expression for SQL bucketing (replicates dashboard.rs logic).
 fn period_expr(granularity: &str, date_col: &str) -> String {
     match granularity {
@@ -116,25 +136,7 @@ pub async fn get_delais_kpi(
     let taux_48h = pct(lt48h_global, total_resolus);
 
     let positive: Vec<f64> = durations.iter().copied().filter(|&d| d >= 0.0).collect();
-    let sum: f64 = positive.iter().sum();
-    let mttr_jours = if positive.is_empty() {
-        0.0
-    } else {
-        (sum / positive.len() as f64 * 10.0).round() / 10.0
-    };
-
-    let mediane_jours = if positive.is_empty() {
-        0.0
-    } else {
-        let mut sorted = positive.clone();
-        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-        let mid = sorted.len() / 2;
-        if sorted.len() % 2 == 0 {
-            ((sorted[mid - 1] + sorted[mid]) / 2.0 * 10.0).round() / 10.0
-        } else {
-            (sorted[mid] * 10.0).round() / 10.0
-        }
-    };
+    let (mttr_jours, mediane_jours) = compute_mttr_median(&positive);
 
     // Distribution by tranches
     let mut lt24 = 0usize;
@@ -175,10 +177,10 @@ pub async fn get_delais_kpi(
             "SELECT {pe} AS periode,
                     julianday(date_cloture_approx) - julianday(date_ouverture) AS dur
              FROM tickets
-             WHERE import_id = ? AND est_vivant = 0
+             WHERE import_id = ?1 AND est_vivant = 0
                AND date_cloture_approx IS NOT NULL AND date_cloture_approx != ''
                AND date_ouverture IS NOT NULL
-               AND date_cloture_approx >= ? AND date_cloture_approx < date(?, '+1 day')"
+               AND date_cloture_approx >= ?2 AND date_cloture_approx < date(?3, '+1 day')"
         );
         let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = vec![
             Box::new(import_id),
@@ -186,13 +188,13 @@ pub async fn get_delais_kpi(
             Box::new(to_str.clone()),
         ];
         if let Some(ref v) = cat {
-            sql.push_str(" AND categorie = ?");
+            sql.push_str(&format!(" AND categorie = ?{}", params.len() + 1));
             params.push(Box::new(v.clone()));
         } else if let Some(ref v) = cat_n2 {
-            sql.push_str(" AND categorie_niveau2 = ?");
+            sql.push_str(&format!(" AND categorie_niveau2 = ?{}", params.len() + 1));
             params.push(Box::new(v.clone()));
         } else if let Some(ref v) = cat_n1 {
-            sql.push_str(" AND categorie_niveau1 = ?");
+            sql.push_str(&format!(" AND categorie_niveau1 = ?{}", params.len() + 1));
             params.push(Box::new(v.clone()));
         }
         sql.push_str(" ORDER BY periode");
@@ -267,11 +269,18 @@ pub async fn get_distinct_categories_for_delais(
     state: tauri::State<'_, AppState>,
     request: CategoriesDelaisRequest,
 ) -> Result<Vec<String>, String> {
+    let date_from = parse_date_flexible(&request.date_from)
+        .ok_or_else(|| format!("Date invalide: {}", request.date_from))?;
+    let date_to = parse_date_flexible(&request.date_to)
+        .ok_or_else(|| format!("Date invalide: {}", request.date_to))?;
+    let from_str = date_from.format("%Y-%m-%d").to_string();
+    let to_str = date_to.format("%Y-%m-%d").to_string();
+
     state.db(|conn| {
         queries::get_distinct_categories_for_delais(
             conn,
-            &request.date_from,
-            &request.date_to,
+            &from_str,
+            &to_str,
             &request.column,
             request.parent_column.as_deref(),
             request.parent_value.as_deref(),
@@ -331,21 +340,7 @@ pub async fn get_delais_par_categorie(
             let total = durations.len();
             let lt24 = durations.iter().filter(|&&d| d < 1.0).count();
             let lt48 = durations.iter().filter(|&&d| d < 2.0).count();
-            let sum: f64 = durations.iter().sum();
-            let mttr = if total > 0 { (sum / total as f64 * 10.0).round() / 10.0 } else { 0.0 };
-
-            let mediane = if total > 0 {
-                let mut sorted = durations.clone();
-                sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-                let mid = sorted.len() / 2;
-                if sorted.len() % 2 == 0 {
-                    ((sorted[mid - 1] + sorted[mid]) / 2.0 * 10.0).round() / 10.0
-                } else {
-                    (sorted[mid] * 10.0).round() / 10.0
-                }
-            } else {
-                0.0
-            };
+            let (mttr, mediane) = compute_mttr_median(&durations);
 
             CategorieDelais {
                 categorie: cat,
