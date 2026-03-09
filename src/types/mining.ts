@@ -142,3 +142,27 @@ export interface CooccurrenceResult {
   edges: CooccurrenceEdge[];
   ticketMap: Record<string, TicketRef[]>;
 }
+
+// ── Mind Map ──
+export interface MindMapRequest {
+  word: string;
+  includeResolved?: boolean;
+  maxBranches?: number;
+  maxLeaves?: number;
+}
+
+export interface MindMapResult {
+  root: string;
+  branches: MindMapBranch[];
+}
+
+export interface MindMapBranch {
+  word: string;
+  weight: number;
+  children: MindMapLeaf[];
+}
+
+export interface MindMapLeaf {
+  word: string;
+  weight: number;
+}
