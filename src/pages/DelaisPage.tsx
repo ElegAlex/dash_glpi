@@ -2,13 +2,15 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { subDays } from 'date-fns';
 import { invoke } from '@tauri-apps/api/core';
 import * as echarts from 'echarts/core';
-import { Clock, Zap, Timer, Target } from 'lucide-react';
+import { Clock, Zap, Timer, Target, X, Filter } from 'lucide-react';
 import { CompactFilterBar } from '../components/shared/CompactFilterBar';
 import { KpiCard } from '../components/shared/KpiCard';
 import { Card } from '../components/shared/Card';
+import { CategorieDelaisTable } from '../components/delais/CategorieDelaisTable';
 import { useInvoke } from '../hooks/useInvoke';
 import { useECharts } from '../hooks/useECharts';
 import type { DelaisKpi, TrancheDelai } from '../types/delais';
+import type { CategorieDelais } from '../types/delais';
 import type { ImportHistory } from '../types/config';
 import { type DateRange, type Granularity } from '../components/shared/DateRangePicker';
 import type { EChartsCoreOption } from 'echarts/core';
@@ -238,14 +240,26 @@ function DelaisPage() {
   const [granularity, setGranularity] = useState<Granularity>('month');
   const { data, loading, error, execute } = useInvoke<DelaisKpi>();
   const initialized = useRef(false);
+  const [activeTab, setActiveTab] = useState<'synthese' | 'par-categorie'>('synthese');
+  const [catNiveau1, setCatNiveau1] = useState<string | null>(null);
+  const [catNiveau2, setCatNiveau2] = useState<string | null>(null);
+  const [categorie, setCategorie] = useState<string | null>(null);
+  const [catOptions1, setCatOptions1] = useState<string[]>([]);
+  const [catOptions2, setCatOptions2] = useState<string[]>([]);
+  const [catOptions3, setCatOptions3] = useState<string[]>([]);
+  const [catTableData, setCatTableData] = useState<CategorieDelais[]>([]);
+  const [catTableLoading, setCatTableLoading] = useState(false);
 
   const load = useCallback(
-    (r: DateRange, g: Granularity) => {
+    (r: DateRange, g: Granularity, cn1?: string | null, cn2?: string | null, cat?: string | null) => {
       execute('get_delais_kpi', {
         request: {
           dateFrom: formatDate(r.from),
           dateTo: formatDate(r.to),
           granularity: g,
+          categorieNiveau1: cn1 || undefined,
+          categorieNiveau2: cn2 || undefined,
+          categorie: cat || undefined,
         },
       });
     },
@@ -264,24 +278,111 @@ function DelaisPage() {
         const days = (to.getTime() - from.getTime()) / 86400000;
         const g: Granularity = days > 365 ? 'quarter' : days > 60 ? 'month' : days > 14 ? 'week' : 'day';
         setGranularity(g);
-        load({ from, to }, g);
+        load({ from, to }, g, null, null, null);
       } else {
-        load(range, granularity);
+        load(range, granularity, null, null, null);
       }
     }).catch(() => {
-      load(range, granularity);
+      load(range, granularity, null, null, null);
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const loadCatOptions = useCallback(async (
+    column: string,
+    parentColumn?: string,
+    parentValue?: string,
+  ) => {
+    return invoke<string[]>('get_distinct_categories_for_delais', {
+      request: {
+        dateFrom: formatDate(range.from),
+        dateTo: formatDate(range.to),
+        column,
+        parentColumn,
+        parentValue,
+      },
+    });
+  }, [range]);
+
+  useEffect(() => {
+    if (!data) return;
+    loadCatOptions('categorie_niveau1').then(setCatOptions1).catch(() => setCatOptions1([]));
+  }, [data, loadCatOptions]);
+
+  useEffect(() => {
+    if (!catNiveau1) { setCatOptions2([]); return; }
+    loadCatOptions('categorie_niveau2', 'categorie_niveau1', catNiveau1)
+      .then(setCatOptions2).catch(() => setCatOptions2([]));
+  }, [catNiveau1, loadCatOptions]);
+
+  useEffect(() => {
+    if (!catNiveau2) { setCatOptions3([]); return; }
+    loadCatOptions('categorie', 'categorie_niveau2', catNiveau2)
+      .then(setCatOptions3).catch(() => setCatOptions3([]));
+  }, [catNiveau2, loadCatOptions]);
+
+  const loadCatTable = useCallback(async () => {
+    setCatTableLoading(true);
+    try {
+      const result = await invoke<CategorieDelais[]>('get_delais_par_categorie', {
+        request: {
+          dateFrom: formatDate(range.from),
+          dateTo: formatDate(range.to),
+          categorieNiveau1: catNiveau1 || undefined,
+          categorieNiveau2: catNiveau2 || undefined,
+          categorie: categorie || undefined,
+        },
+      });
+      setCatTableData(result);
+    } catch {
+      setCatTableData([]);
+    } finally {
+      setCatTableLoading(false);
+    }
+  }, [range, catNiveau1, catNiveau2, categorie]);
+
+  useEffect(() => {
+    if (activeTab === 'par-categorie') {
+      loadCatTable();
+    }
+  }, [activeTab, loadCatTable]);
+
+  const handleCatNiveau1Change = (val: string) => {
+    const v = val || null;
+    setCatNiveau1(v);
+    setCatNiveau2(null);
+    setCategorie(null);
+    load(range, granularity, v, null, null);
+  };
+
+  const handleCatNiveau2Change = (val: string) => {
+    const v = val || null;
+    setCatNiveau2(v);
+    setCategorie(null);
+    load(range, granularity, catNiveau1, v, null);
+  };
+
+  const handleCategorieChange = (val: string) => {
+    const v = val || null;
+    setCategorie(v);
+    load(range, granularity, catNiveau1, catNiveau2, v);
+  };
+
+  const resetCatFilter = () => {
+    setCatNiveau1(null);
+    setCatNiveau2(null);
+    setCategorie(null);
+    load(range, granularity, null, null, null);
+  };
 
   const handleRangeChange = (r: DateRange, autoGran: Granularity) => {
     setRange(r);
     setGranularity(autoGran);
-    load(r, autoGran);
+    load(r, autoGran, catNiveau1, catNiveau2, categorie);
   };
 
   const handleGranularityChange = (g: Granularity) => {
     setGranularity(g);
-    load(range, g);
+    load(range, g, catNiveau1, catNiveau2, categorie);
   };
 
   return (
@@ -301,6 +402,77 @@ function DelaisPage() {
             onGranularityChange={handleGranularityChange}
           />
         </div>
+
+        {/* Category filter */}
+        <div className="flex items-center gap-3 flex-wrap mt-2">
+          {catOptions1.length > 0 && (
+            <>
+              <Filter size={14} className="text-slate-400" />
+              <select
+                value={catNiveau1 || ''}
+                onChange={(e) => handleCatNiveau1Change(e.target.value)}
+                className="text-xs font-[DM_Sans] bg-slate-100 rounded-lg px-2.5 py-1.5 text-slate-700 border-none outline-none"
+              >
+                <option value="">Toutes categories</option>
+                {catOptions1.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+
+              {catNiveau1 && catOptions2.length > 0 && (
+                <select
+                  value={catNiveau2 || ''}
+                  onChange={(e) => handleCatNiveau2Change(e.target.value)}
+                  className="text-xs font-[DM_Sans] bg-slate-100 rounded-lg px-2.5 py-1.5 text-slate-700 border-none outline-none"
+                >
+                  <option value="">Toutes sous-cat.</option>
+                  {catOptions2.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              )}
+
+              {catNiveau2 && catOptions3.length > 0 && (
+                <select
+                  value={categorie || ''}
+                  onChange={(e) => handleCategorieChange(e.target.value)}
+                  className="text-xs font-[DM_Sans] bg-slate-100 rounded-lg px-2.5 py-1.5 text-slate-700 border-none outline-none"
+                >
+                  <option value="">Toutes</option>
+                  {catOptions3.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              )}
+
+              {catNiveau1 && (
+                <button
+                  onClick={resetCatFilter}
+                  className="p-1 rounded-md hover:bg-slate-200 transition-colors"
+                  title="Reinitialiser le filtre"
+                >
+                  <X size={14} className="text-slate-400" />
+                </button>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Tab toggle */}
+        <div className="flex items-center gap-1 mt-3">
+          <div className="flex rounded-lg overflow-hidden bg-slate-100">
+            <button
+              onClick={() => setActiveTab('synthese')}
+              className={`px-3 py-1.5 text-xs font-medium font-[DM_Sans] transition-colors ${
+                activeTab === 'synthese' ? 'bg-[#0C419A] text-white' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              Synthese
+            </button>
+            <button
+              onClick={() => setActiveTab('par-categorie')}
+              className={`px-3 py-1.5 text-xs font-medium font-[DM_Sans] transition-colors ${
+                activeTab === 'par-categorie' ? 'bg-[#0C419A] text-white' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              Par categorie
+            </button>
+          </div>
+        </div>
       </header>
 
       <div className="px-8 pb-8 pt-6 space-y-6">
@@ -314,7 +486,7 @@ function DelaisPage() {
           </Card>
         )}
 
-        {data && (
+        {activeTab === 'synthese' && data && (
           <>
             {/* KPI Cards */}
             <div className="grid grid-cols-4 gap-5 animate-fade-slide-up">
@@ -384,6 +556,12 @@ function DelaisPage() {
             </div>
 
           </>
+        )}
+
+        {activeTab === 'par-categorie' && (
+          <div className="animate-fade-slide-up">
+            <CategorieDelaisTable data={catTableData} loading={catTableLoading} />
+          </div>
         )}
       </div>
     </div>

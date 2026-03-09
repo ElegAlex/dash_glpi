@@ -21,3 +21,28 @@ export interface TrancheDelai {
   count: number;
   pourcentage: number;
 }
+
+export interface CategorieDelais {
+  categorie: string;
+  totalResolus: number;
+  mttrJours: number;
+  medianeJours: number;
+  taux24h: number;
+  taux48h: number;
+}
+
+export interface CategoriesDelaisRequest {
+  dateFrom: string;
+  dateTo: string;
+  column: string;
+  parentColumn?: string;
+  parentValue?: string;
+}
+
+export interface DelaisParCategorieRequest {
+  dateFrom: string;
+  dateTo: string;
+  categorieNiveau1?: string;
+  categorieNiveau2?: string;
+  categorie?: string;
+}
