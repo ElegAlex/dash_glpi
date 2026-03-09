@@ -7,6 +7,7 @@ import {
   TrendingUp,
   Timer,
   Search,
+  BookOpen,
   UserCircle,
   Settings,
 } from "lucide-react";
@@ -19,6 +20,7 @@ const NAV_ITEMS = [
   { icon: TrendingUp, label: "Bilan", path: "/bilan" },
   { icon: Timer, label: "Delais", path: "/delais" },
   { icon: Search, label: "Text Mining", path: "/mining" },
+  { icon: BookOpen, label: "Base de connaissances", path: "/knowledge-base" },
   { icon: UserCircle, label: "Suivi", path: "/suivi" },
   { icon: Settings, label: "Parametres", path: "/settings" },
 ] as const;
