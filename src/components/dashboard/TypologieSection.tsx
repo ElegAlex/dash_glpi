@@ -37,11 +37,11 @@ function SoldeEvolutionChart({ data, stockDebut }: { data: VolumePeriode[]; stoc
                   <div>${p.marker} Solde cumule: <b>${p.value > 0 ? '+' : ''}${p.value.toLocaleString('fr-FR')}</b></div>`;
         },
       },
-      grid: { left: 50, right: 20, top: 20, bottom: 30 },
+      grid: { left: 50, right: 20, top: 20, bottom: 30, containLabel: true },
       xAxis: {
         type: 'category' as const,
         data: periodes,
-        axisLabel: { rotate: periodes.length > 12 ? 45 : 0 },
+        axisLabel: { rotate: periodes.length > 6 ? 90 : 0 },
       },
       yAxis: {
         type: 'value' as const,
@@ -124,7 +124,7 @@ function HorizontalBarChart({ data, limit = 10 }: { data: VentilationItem[]; lim
         data: labels,
         inverse: true,
         axisLabel: {
-          fontSize: 11,
+          fontSize: 10,
           width: 120,
           overflow: 'truncate' as const,
         },

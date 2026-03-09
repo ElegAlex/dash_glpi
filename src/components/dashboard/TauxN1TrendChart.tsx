@@ -40,11 +40,12 @@ export function TauxN1TrendChart({ data, objectifItil }: TauxN1TrendChartProps) 
         right: 20,
         top: 50,
         bottom: 30,
+        containLabel: true,
       },
       xAxis: {
         type: 'category' as const,
         data: labels,
-        axisLabel: {},
+        axisLabel: { rotate: labels.length > 6 ? 90 : 0 },
       },
       yAxis: {
         type: 'value' as const,

@@ -24,13 +24,13 @@ export const CPAM_MATERIAL_THEME: Record<string, unknown> = {
   legend: {
     textStyle: {
       fontFamily: 'Source Sans 3, system-ui',
-      fontSize: 13,
+      fontSize: 11,
       color: '#64748B',
     },
     icon: 'roundRect',
-    itemWidth: 14,
-    itemHeight: 8,
-    itemGap: 20,
+    itemWidth: 12,
+    itemHeight: 6,
+    itemGap: 16,
   },
 
   tooltip: {
@@ -54,7 +54,7 @@ export const CPAM_MATERIAL_THEME: Record<string, unknown> = {
     axisTick: { show: false },
     axisLabel: {
       fontFamily: 'Source Sans 3, system-ui',
-      fontSize: 11,
+      fontSize: 10,
       color: '#94A3B8',
     },
     splitLine: { show: false },
@@ -65,7 +65,7 @@ export const CPAM_MATERIAL_THEME: Record<string, unknown> = {
     axisTick: { show: false },
     axisLabel: {
       fontFamily: 'Source Sans 3, system-ui',
-      fontSize: 11,
+      fontSize: 10,
       color: '#94A3B8',
     },
     splitLine: {

@@ -45,12 +45,12 @@ export function BilanChart({ periodes }: BilanChartProps) {
         bottom: 80,
         left: 60,
         right: needSecondaryAxis ? 60 : 30,
-        containLabel: false,
+        containLabel: true,
       },
       xAxis: {
         type: 'category',
         data: labels,
-        axisLabel: { rotate: labels.length > 12 ? 35 : 0 },
+        axisLabel: { rotate: labels.length > 6 ? 90 : 0 },
       },
       yAxis: [
         {

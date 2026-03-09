@@ -42,7 +42,7 @@ function TreemapChart({ tree }: { tree: CategoryTree }) {
           height: 28,
           itemStyle: {
             color: '#0C419A',
-            textStyle: { color: '#ffffff', fontSize: 13 },
+            textStyle: { color: '#ffffff', fontSize: 11 },
           },
           emphasis: { itemStyle: { color: '#0a3783' } },
         },
@@ -63,7 +63,7 @@ function TreemapChart({ tree }: { tree: CategoryTree }) {
         label: {
           show: true,
           formatter: '{b}\n{c}',
-          fontSize: 12,
+          fontSize: 10,
           color: '#ffffff',
         },
       },

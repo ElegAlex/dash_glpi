@@ -63,11 +63,11 @@ function HorizontalBarChart({ data, title }: { data: { label: string; count: num
 function EvolutionLineChart({ data }: { data: { periode: string; count: number }[] }) {
   const option = useMemo(() => ({
     tooltip: { trigger: 'axis' as const },
-    grid: { left: 45, right: 15, top: 15, bottom: 25 },
+    grid: { left: 45, right: 15, top: 15, bottom: 25, containLabel: true },
     xAxis: {
       type: 'category' as const,
       data: data.map((d) => d.periode),
-      axisLabel: { rotate: data.length > 8 ? 45 : 0 },
+      axisLabel: { rotate: data.length > 6 ? 90 : 0 },
     },
     yAxis: {
       type: 'value' as const,

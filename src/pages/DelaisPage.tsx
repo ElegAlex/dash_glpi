@@ -48,11 +48,11 @@ function TrendChart({ data }: { data: DelaisKpi }) {
         data: ['Taux 24h', 'Taux 48h'],
         top: 8,
       },
-      grid: { top: 60, bottom: 40, left: 50, right: 30, containLabel: false },
+      grid: { top: 60, bottom: 30, left: 50, right: 30, containLabel: true },
       xAxis: {
         type: 'category' as const,
         data: labels,
-        axisLabel: { rotate: labels.length > 12 ? 35 : 0 },
+        axisLabel: { rotate: labels.length > 6 ? 90 : 0 },
       },
       yAxis: {
         type: 'value' as const,
