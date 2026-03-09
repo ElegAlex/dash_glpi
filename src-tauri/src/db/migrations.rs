@@ -18,6 +18,10 @@ const MIGRATIONS: &[Migration] = &[
         version: 3,
         sql: include_str!("sql/003_date_resolution.sql"),
     },
+    Migration {
+        version: 4,
+        sql: include_str!("sql/004_user_stopwords.sql"),
+    },
 ];
 
 pub fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {

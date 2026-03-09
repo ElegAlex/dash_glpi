@@ -1,0 +1,5 @@
+CREATE TABLE IF NOT EXISTS user_stopwords (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    word TEXT UNIQUE NOT NULL COLLATE NOCASE,
+    created_at TEXT DEFAULT (datetime('now'))
+);
