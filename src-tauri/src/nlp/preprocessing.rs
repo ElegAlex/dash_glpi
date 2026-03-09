@@ -122,8 +122,8 @@ pub struct StopWordFilter {
     phrase_patterns: Vec<String>,
     /// Pre-compiled case-insensitive regex per phrase pattern
     phrase_regexes: Vec<Regex>,
-    /// Single-word stop words (lowercase) for layers 1+2+4-dynamic
-    single_words: HashSet<String>,
+    /// Single-word stop words (lowercase) for layers 1+2+4-dynamic+5-user
+    pub single_words: HashSet<String>,
 }
 
 impl StopWordFilter {

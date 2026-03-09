@@ -136,11 +136,12 @@ pub async fn run_text_analysis(
         " AND est_vivant = 1"
     };
 
-    let (texts, ticket_ids, ticket_titres, group_map, technician_names): (
+    let (texts, ticket_ids, ticket_titres, group_map, technician_names, user_stopwords): (
         Vec<String>,
         Vec<u64>,
         Vec<String>,
         Option<HashMap<String, Vec<usize>>>,
+        Vec<String>,
         Vec<String>,
     ) = {
         let guard = state.db.lock().map_err(|e| format!("Lock error: {e}"))?;
@@ -228,7 +229,15 @@ pub async fn run_text_analysis(
             .collect::<Result<Vec<String>, _>>()
             .map_err(|e| format!("SQL collect techniciens: {e}"))?;
 
-        (texts, ticket_ids, ticket_titres, group_map, technician_names)
+        let user_stopwords: Vec<String> = conn
+            .prepare("SELECT word FROM user_stopwords")
+            .map_err(|e| format!("SQL prepare stopwords: {e}"))?
+            .query_map([], |row| row.get(0))
+            .map_err(|e| format!("SQL query stopwords: {e}"))?
+            .collect::<Result<Vec<String>, _>>()
+            .map_err(|e| format!("SQL collect stopwords: {e}"))?;
+
+        (texts, ticket_ids, ticket_titres, group_map, technician_names, user_stopwords)
     };
 
     // ── 2. Heavy NLP work in spawn_blocking ───────────────────────────────────
@@ -237,6 +246,9 @@ pub async fn run_text_analysis(
             // Build stop-word filter with technician names
             let mut filter = StopWordFilter::new();
             filter.add_technician_names(&technician_names);
+            for w in &user_stopwords {
+                filter.single_words.insert(w.clone());
+            }
 
             // Preprocess corpus — collect stem↔original pairs for reverse mapping
             let mut all_pairs: Vec<(String, String)> = Vec::new();
@@ -349,7 +361,7 @@ pub async fn get_clusters(
         ""
     };
 
-    let (texts, ticket_ids, technician_names) = {
+    let (texts, ticket_ids, technician_names, user_stopwords) = {
         let guard = state.db.lock().map_err(|e| format!("Lock error: {e}"))?;
         let conn = guard.as_ref().ok_or("Base de données non initialisée")?;
         let import_id = get_active_import(conn)?;
@@ -392,7 +404,15 @@ pub async fn get_clusters(
             .collect::<Result<Vec<String>, _>>()
             .map_err(|e| format!("SQL collect techniciens: {e}"))?;
 
-        (texts, ticket_ids, technician_names)
+        let user_stopwords: Vec<String> = conn
+            .prepare("SELECT word FROM user_stopwords")
+            .map_err(|e| format!("SQL prepare stopwords: {e}"))?
+            .query_map([], |row| row.get(0))
+            .map_err(|e| format!("SQL query stopwords: {e}"))?
+            .collect::<Result<Vec<String>, _>>()
+            .map_err(|e| format!("SQL collect stopwords: {e}"))?;
+
+        (texts, ticket_ids, technician_names, user_stopwords)
     };
 
     let total_tickets = ticket_ids.len();
@@ -400,6 +420,9 @@ pub async fn get_clusters(
     let result = tokio::task::spawn_blocking(move || -> Result<ClusterResult, String> {
         let mut filter = StopWordFilter::new();
         filter.add_technician_names(&technician_names);
+        for w in &user_stopwords {
+            filter.single_words.insert(w.clone());
+        }
 
         // Preprocess with stem mapping for clusters too
         let mut all_pairs: Vec<(String, String)> = Vec::new();
@@ -1006,7 +1029,7 @@ pub async fn get_cooccurrence_network(
         " AND est_vivant = 1"
     };
 
-    let (texts, ticket_ids, ticket_titres, technician_names) = {
+    let (texts, ticket_ids, ticket_titres, technician_names, user_stopwords) = {
         let guard = state.db.lock().map_err(|e| format!("Lock error: {e}"))?;
         let conn = guard.as_ref().ok_or("Base de données non initialisée")?;
         let import_id = get_active_import(conn)?;
@@ -1051,13 +1074,24 @@ pub async fn get_cooccurrence_network(
             .collect::<Result<Vec<String>, _>>()
             .map_err(|e| format!("SQL collect techniciens: {e}"))?;
 
-        (texts, ticket_ids, ticket_titres, technician_names)
+        let user_stopwords: Vec<String> = conn
+            .prepare("SELECT word FROM user_stopwords")
+            .map_err(|e| format!("SQL prepare stopwords: {e}"))?
+            .query_map([], |row| row.get(0))
+            .map_err(|e| format!("SQL query stopwords: {e}"))?
+            .collect::<Result<Vec<String>, _>>()
+            .map_err(|e| format!("SQL collect stopwords: {e}"))?;
+
+        (texts, ticket_ids, ticket_titres, technician_names, user_stopwords)
     };
 
     let result =
         tokio::task::spawn_blocking(move || -> Result<CooccurrenceResult, String> {
             let mut filter = StopWordFilter::new();
             filter.add_technician_names(&technician_names);
+            for w in &user_stopwords {
+                filter.single_words.insert(w.clone());
+            }
 
             let mut all_pairs: Vec<(String, String)> = Vec::new();
             let tokenized: Vec<Vec<String>> = texts
@@ -1143,6 +1177,60 @@ pub async fn get_cooccurrence_network(
         .map_err(|e| format!("spawn_blocking error: {e}"))??;
 
     Ok(result)
+}
+
+// ── User Stopwords ──────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn get_user_stopwords(
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<String>, String> {
+    let guard = state.db.lock().map_err(|e| format!("Lock error: {e}"))?;
+    let conn = guard.as_ref().ok_or("Base de donnees non initialisee")?;
+    let mut stmt = conn
+        .prepare("SELECT word FROM user_stopwords ORDER BY word")
+        .map_err(|e| format!("SQL prepare: {e}"))?;
+    let words: Vec<String> = stmt
+        .query_map([], |row| row.get(0))
+        .map_err(|e| format!("SQL query: {e}"))?
+        .collect::<Result<Vec<String>, _>>()
+        .map_err(|e| format!("SQL collect: {e}"))?;
+    Ok(words)
+}
+
+#[tauri::command]
+pub async fn add_user_stopwords(
+    state: tauri::State<'_, AppState>,
+    words: Vec<String>,
+) -> Result<(), String> {
+    let guard = state.db.lock().map_err(|e| format!("Lock error: {e}"))?;
+    let conn = guard.as_ref().ok_or("Base de donnees non initialisee")?;
+    let mut stmt = conn
+        .prepare("INSERT OR IGNORE INTO user_stopwords (word) VALUES (?1)")
+        .map_err(|e| format!("SQL prepare: {e}"))?;
+    for word in &words {
+        let w = word.trim().to_lowercase();
+        if !w.is_empty() {
+            stmt.execute([&w]).map_err(|e| format!("SQL insert: {e}"))?;
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn remove_user_stopwords(
+    state: tauri::State<'_, AppState>,
+    words: Vec<String>,
+) -> Result<(), String> {
+    let guard = state.db.lock().map_err(|e| format!("Lock error: {e}"))?;
+    let conn = guard.as_ref().ok_or("Base de donnees non initialisee")?;
+    let mut stmt = conn
+        .prepare("DELETE FROM user_stopwords WHERE LOWER(word) = LOWER(?1)")
+        .map_err(|e| format!("SQL prepare: {e}"))?;
+    for word in &words {
+        stmt.execute([word.trim()]).map_err(|e| format!("SQL delete: {e}"))?;
+    }
+    Ok(())
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -1262,5 +1350,31 @@ mod tests {
             !kw_words.contains(&"dupont"),
             "'dupont' should not be in keywords"
         );
+    }
+
+    #[test]
+    fn test_user_stopwords_crud() {
+        let conn = setup_db();
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS user_stopwords (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                word TEXT UNIQUE NOT NULL COLLATE NOCASE,
+                created_at TEXT DEFAULT (datetime('now'))
+            );"
+        ).unwrap();
+
+        // Insert
+        conn.execute("INSERT OR IGNORE INTO user_stopwords (word) VALUES ('probleme')", []).unwrap();
+        conn.execute("INSERT OR IGNORE INTO user_stopwords (word) VALUES ('mme')", []).unwrap();
+        // Duplicate ignored
+        conn.execute("INSERT OR IGNORE INTO user_stopwords (word) VALUES ('probleme')", []).unwrap();
+
+        let count: i64 = conn.query_row("SELECT COUNT(*) FROM user_stopwords", [], |row| row.get(0)).unwrap();
+        assert_eq!(count, 2);
+
+        // Delete
+        conn.execute("DELETE FROM user_stopwords WHERE LOWER(word) = LOWER('mme')", []).unwrap();
+        let count2: i64 = conn.query_row("SELECT COUNT(*) FROM user_stopwords", [], |row| row.get(0)).unwrap();
+        assert_eq!(count2, 1);
     }
 }

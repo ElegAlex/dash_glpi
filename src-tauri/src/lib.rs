@@ -140,6 +140,9 @@ pub fn run() {
             commands::mining::detect_duplicates,
             commands::mining::get_cooccurrence_network,
             commands::mining::get_cluster_detail,
+            commands::mining::get_user_stopwords,
+            commands::mining::add_user_stopwords,
+            commands::mining::remove_user_stopwords,
             // Export
             commands::export::export_excel_stock,
             commands::export::export_excel_bilan,
