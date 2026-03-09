@@ -160,6 +160,8 @@ pub fn run() {
             commands::dashboard::get_dashboard_kpi,
             // Délais prise en charge
             commands::delais::get_delais_kpi,
+            commands::delais::get_distinct_categories_for_delais,
+            commands::delais::get_delais_par_categorie,
         ])
         .run(tauri::generate_context!());
 
