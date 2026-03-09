@@ -114,6 +114,7 @@ export interface DuplicatePair {
 
 // ── Co-occurrence Network ──
 export interface CooccurrenceRequest {
+  corpus?: string;
   topNNodes?: number;
   maxEdges?: number;
   includeResolved?: boolean;

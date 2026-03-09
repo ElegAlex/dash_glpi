@@ -20,7 +20,6 @@ use crate::state::AppState;
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TextAnalysisRequest {
-    #[allow(dead_code)]
     pub corpus: String,
     pub scope: String,
     pub group_by: Option<String>,
@@ -118,6 +117,14 @@ fn get_active_import(conn: &rusqlite::Connection) -> Result<i64, String> {
     .map_err(|e| format!("Aucun import actif: {e}"))
 }
 
+fn text_column_for_corpus(corpus: &str) -> &'static str {
+    match corpus {
+        "suivis" => "suivis_description",
+        "solutions" => "solution",
+        _ => "titre",
+    }
+}
+
 // ── Commands ──────────────────────────────────────────────────────────────────
 
 #[tauri::command]
@@ -149,11 +156,13 @@ pub async fn run_text_analysis(
 
         let import_id = get_active_import(conn)?;
 
+        let text_col = text_column_for_corpus(&request.corpus);
+
         // Load texts, ids (and optionally group labels)
         let (texts, ticket_ids, ticket_titres, group_map) = if need_groups {
             let sql = format!(
-                "SELECT id, titre, groupe_principal FROM tickets WHERE import_id = ?1{}",
-                vivant_clause
+                "SELECT id, titre, {}, groupe_principal FROM tickets WHERE import_id = ?1{}",
+                text_col, vivant_clause
             );
             let mut stmt = conn
                 .prepare(&sql)
@@ -168,17 +177,18 @@ pub async fn run_text_analysis(
                 .query_map([import_id], |row: &rusqlite::Row<'_>| {
                     let id: i64 = row.get(0)?;
                     let titre: String = row.get(1)?;
-                    let groupe: Option<String> = row.get(2)?;
-                    Ok((id, titre, groupe))
+                    let text: String = row.get::<_, Option<String>>(2)?.unwrap_or_default();
+                    let groupe: Option<String> = row.get(3)?;
+                    Ok((id, titre, text, groupe))
                 })
                 .map_err(|e| format!("SQL query: {e}"))?;
 
             for row in rows {
-                let (id, titre, groupe) = row.map_err(|e| format!("SQL row: {e}"))?;
+                let (id, titre, text, groupe) = row.map_err(|e| format!("SQL row: {e}"))?;
                 let doc_idx = texts.len();
                 ids.push(id as u64);
-                titres.push(titre.clone());
-                texts.push(titre);
+                titres.push(titre);
+                texts.push(text);
                 let group_key = groupe.unwrap_or_else(|| "Inconnu".to_string());
                 groups.entry(group_key).or_default().push(doc_idx);
             }
@@ -186,8 +196,8 @@ pub async fn run_text_analysis(
             (texts, ids, titres, Some(groups))
         } else {
             let sql = format!(
-                "SELECT id, titre FROM tickets WHERE import_id = ?1{}",
-                vivant_clause
+                "SELECT id, titre, {} FROM tickets WHERE import_id = ?1{}",
+                text_col, vivant_clause
             );
             let mut stmt = conn
                 .prepare(&sql)
@@ -201,15 +211,16 @@ pub async fn run_text_analysis(
                 .query_map([import_id], |row: &rusqlite::Row<'_>| {
                     let id: i64 = row.get(0)?;
                     let titre: String = row.get(1)?;
-                    Ok((id, titre))
+                    let text: String = row.get::<_, Option<String>>(2)?.unwrap_or_default();
+                    Ok((id, titre, text))
                 })
                 .map_err(|e| format!("SQL query: {e}"))?;
 
             for row in rows {
-                let (id, titre) = row.map_err(|e| format!("SQL row: {e}"))?;
+                let (id, titre, text) = row.map_err(|e| format!("SQL row: {e}"))?;
                 ids.push(id as u64);
-                titres.push(titre.clone());
-                texts.push(titre);
+                titres.push(titre);
+                texts.push(text);
             }
 
             (texts, ids, titres, None)
@@ -978,6 +989,7 @@ pub async fn get_cluster_detail(
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CooccurrenceRequest {
+    pub corpus: Option<String>,
     pub top_n_nodes: Option<usize>,
     pub max_edges: Option<usize>,
     pub include_resolved: Option<bool>,
@@ -1019,6 +1031,7 @@ pub async fn get_cooccurrence_network(
     state: tauri::State<'_, AppState>,
     request: CooccurrenceRequest,
 ) -> Result<CooccurrenceResult, String> {
+    let text_col = text_column_for_corpus(request.corpus.as_deref().unwrap_or("titres"));
     let top_n_nodes = request.top_n_nodes.unwrap_or(80);
     let max_edges = request.max_edges.unwrap_or(200);
     let include_resolved = request.include_resolved.unwrap_or(false);
@@ -1035,8 +1048,8 @@ pub async fn get_cooccurrence_network(
         let import_id = get_active_import(conn)?;
 
         let sql = format!(
-            "SELECT id, titre FROM tickets WHERE import_id = ?1{}",
-            vivant_clause
+            "SELECT id, titre, {} FROM tickets WHERE import_id = ?1{}",
+            text_col, vivant_clause
         );
         let mut stmt = conn
             .prepare(&sql)
@@ -1050,15 +1063,16 @@ pub async fn get_cooccurrence_network(
             .query_map([import_id], |row| {
                 let id: i64 = row.get(0)?;
                 let titre: String = row.get(1)?;
-                Ok((id, titre))
+                let text: String = row.get::<_, Option<String>>(2)?.unwrap_or_default();
+                Ok((id, titre, text))
             })
             .map_err(|e| format!("SQL query: {e}"))?;
 
         for row in rows {
-            let (id, titre) = row.map_err(|e| format!("SQL row: {e}"))?;
+            let (id, titre, text) = row.map_err(|e| format!("SQL row: {e}"))?;
             ticket_ids.push(id as u64);
-            ticket_titres.push(titre.clone());
-            texts.push(titre);
+            ticket_titres.push(titre);
+            texts.push(text);
         }
 
         let mut tech_stmt = conn
@@ -1179,6 +1193,39 @@ pub async fn get_cooccurrence_network(
     Ok(result)
 }
 
+// ── Mind Map ────────────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MindMapRequest {
+    pub word: String,
+    pub include_resolved: Option<bool>,
+    pub max_branches: Option<usize>,
+    pub max_leaves: Option<usize>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MindMapResult {
+    pub root: String,
+    pub branches: Vec<MindMapBranch>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MindMapBranch {
+    pub word: String,
+    pub weight: usize,
+    pub children: Vec<MindMapLeaf>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MindMapLeaf {
+    pub word: String,
+    pub weight: usize,
+}
+
 // ── User Stopwords ──────────────────────────────────────────────────────────
 
 #[tauri::command]
@@ -1231,6 +1278,157 @@ pub async fn remove_user_stopwords(
         stmt.execute([word.trim()]).map_err(|e| format!("SQL delete: {e}"))?;
     }
     Ok(())
+}
+
+// ── Mind Map Command ────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn get_cooccurrence_mindmap(
+    state: tauri::State<'_, AppState>,
+    request: MindMapRequest,
+) -> Result<MindMapResult, String> {
+    let include_resolved = request.include_resolved.unwrap_or(false);
+    let max_branches = request.max_branches.unwrap_or(15);
+    let max_leaves = request.max_leaves.unwrap_or(5);
+    let target_word = request.word.to_lowercase();
+
+    let vivant_clause = if include_resolved { "" } else { " AND est_vivant = 1" };
+
+    let (texts, technician_names, user_stopwords) = {
+        let guard = state.db.lock().map_err(|e| format!("Lock error: {e}"))?;
+        let conn = guard.as_ref().ok_or("Base de donnees non initialisee")?;
+        let import_id = get_active_import(conn)?;
+
+        let sql = format!("SELECT titre FROM tickets WHERE import_id = ?1{}", vivant_clause);
+        let mut stmt = conn.prepare(&sql).map_err(|e| format!("SQL prepare: {e}"))?;
+        let texts: Vec<String> = stmt
+            .query_map([import_id], |row| row.get(0))
+            .map_err(|e| format!("SQL query: {e}"))?
+            .collect::<Result<Vec<String>, _>>()
+            .map_err(|e| format!("SQL collect: {e}"))?;
+
+        let mut tech_stmt = conn
+            .prepare("SELECT DISTINCT technicien_principal FROM tickets WHERE import_id = ?1 AND technicien_principal IS NOT NULL")
+            .map_err(|e| format!("SQL prepare tech: {e}"))?;
+        let technician_names: Vec<String> = tech_stmt
+            .query_map([import_id], |row| row.get(0))
+            .map_err(|e| format!("SQL query tech: {e}"))?
+            .collect::<Result<Vec<String>, _>>()
+            .map_err(|e| format!("SQL collect tech: {e}"))?;
+
+        let user_stopwords: Vec<String> = conn
+            .prepare("SELECT word FROM user_stopwords")
+            .map_err(|e| format!("SQL prepare sw: {e}"))?
+            .query_map([], |row| row.get(0))
+            .map_err(|e| format!("SQL query sw: {e}"))?
+            .collect::<Result<Vec<String>, _>>()
+            .map_err(|e| format!("SQL collect sw: {e}"))?;
+
+        (texts, technician_names, user_stopwords)
+    };
+
+    let result = tokio::task::spawn_blocking(move || -> Result<MindMapResult, String> {
+        let mut filter = StopWordFilter::new();
+        filter.add_technician_names(&technician_names);
+        for w in &user_stopwords {
+            filter.single_words.insert(w.clone());
+        }
+
+        let mut all_pairs: Vec<(String, String)> = Vec::new();
+        let tokenized: Vec<Vec<String>> = texts
+            .iter()
+            .map(|t| {
+                let pairs = preprocess_text_with_originals(t, &filter);
+                let stems: Vec<String> = pairs.iter().map(|(s, _)| s.clone()).collect();
+                all_pairs.extend(pairs);
+                stems
+            })
+            .collect();
+
+        let stem_map = build_stem_mapping(&all_pairs);
+        let tfidf = build_tfidf_matrix(&tokenized, 2);
+
+        // Find the stem for the target word
+        let target_stem = stem_map
+            .iter()
+            .find(|(_, original)| original.to_lowercase() == target_word)
+            .map(|(stem, _)| stem.clone())
+            .unwrap_or_else(|| target_word.clone());
+
+        let root_idx = match tfidf.vocabulary.iter().position(|v| *v == target_stem) {
+            Some(idx) => idx,
+            None => return Err(format!("Mot '{}' non trouve dans le vocabulaire", target_word)),
+        };
+
+        // Build co-occurrence map: terms that co-occur with root
+        let mut cooc_with_root: HashMap<usize, usize> = HashMap::new();
+        for row in tfidf.matrix.outer_iterator() {
+            let terms: Vec<usize> = row.indices().iter().copied().collect();
+            if !terms.contains(&root_idx) { continue; }
+            for &t in &terms {
+                if t != root_idx {
+                    *cooc_with_root.entry(t).or_insert(0) += 1;
+                }
+            }
+        }
+
+        // Sort by weight, take top branches
+        let mut branch_candidates: Vec<(usize, usize)> = cooc_with_root
+            .iter()
+            .filter(|(_, &w)| w >= 2)
+            .map(|(&idx, &w)| (idx, w))
+            .collect();
+        branch_candidates.sort_by(|a, b| b.1.cmp(&a.1));
+        branch_candidates.truncate(max_branches);
+
+        let branch_set: std::collections::HashSet<usize> =
+            branch_candidates.iter().map(|(idx, _)| *idx).collect();
+
+        // For each branch, find degree-2 co-occurrences (terms in docs containing both root AND branch)
+        let mut branches: Vec<MindMapBranch> = Vec::new();
+        for &(branch_idx, branch_weight) in &branch_candidates {
+            let mut cooc_with_branch: HashMap<usize, usize> = HashMap::new();
+            for row in tfidf.matrix.outer_iterator() {
+                let terms: Vec<usize> = row.indices().iter().copied().collect();
+                if !terms.contains(&root_idx) || !terms.contains(&branch_idx) { continue; }
+                for &t in &terms {
+                    if t != root_idx && t != branch_idx && !branch_set.contains(&t) {
+                        *cooc_with_branch.entry(t).or_insert(0) += 1;
+                    }
+                }
+            }
+
+            let mut leaf_candidates: Vec<(usize, usize)> = cooc_with_branch
+                .into_iter()
+                .filter(|(_, w)| *w >= 2)
+                .collect();
+            leaf_candidates.sort_by(|a, b| b.1.cmp(&a.1));
+            leaf_candidates.truncate(max_leaves);
+
+            let children: Vec<MindMapLeaf> = leaf_candidates
+                .iter()
+                .map(|&(idx, w)| MindMapLeaf {
+                    word: resolve_stem(&tfidf.vocabulary[idx], &stem_map),
+                    weight: w,
+                })
+                .collect();
+
+            branches.push(MindMapBranch {
+                word: resolve_stem(&tfidf.vocabulary[branch_idx], &stem_map),
+                weight: branch_weight,
+                children,
+            });
+        }
+
+        Ok(MindMapResult {
+            root: resolve_stem(&target_stem, &stem_map),
+            branches,
+        })
+    })
+    .await
+    .map_err(|e| format!("spawn_blocking error: {e}"))??;
+
+    Ok(result)
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

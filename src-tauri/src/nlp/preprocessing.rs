@@ -95,6 +95,11 @@ const GLPI_PHRASES: &[&str] = &[
     "merci de ne pas répondre à ce message",
     "satisfaction demandée le",
     "planifié le",
+    "problème résolu",
+    "clôture automatique",
+    "solution approuvée",
+    "résolu par",
+    "fermé automatiquement",
 ];
 
 /// Layer 4 — Signature phrases (pre-defined, removed before tokenisation)
