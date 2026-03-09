@@ -407,6 +407,7 @@ function DelaisPage() {
         <div className="flex items-center gap-3 flex-wrap mt-2">
           {catOptions1.length > 0 && (
             <>
+              <div className="h-5 border-l border-slate-200/60" />
               <Filter size={14} className="text-slate-400" />
               <select
                 value={catNiveau1 || ''}
