@@ -1107,6 +1107,173 @@ pub fn get_bilan_ventilation_par_groupe(
     Ok(rows)
 }
 
+/// Valeurs distinctes d'une colonne catégorie pour les tickets résolus sur une période.
+pub fn get_distinct_categories_for_delais(
+    conn: &Connection,
+    date_from: &str,
+    date_to: &str,
+    col: &str,
+    parent_col: Option<&str>,
+    parent_value: Option<&str>,
+) -> Result<Vec<String>, rusqlite::Error> {
+    let safe_col = match col {
+        "categorie_niveau1" | "categorie_niveau2" | "categorie" => col,
+        _ => return Ok(vec![]),
+    };
+    let import_id = get_active_import_id(conn)?;
+
+    let mut sql = format!(
+        "SELECT DISTINCT {safe_col} FROM tickets \
+         WHERE import_id = ?1 \
+           AND est_vivant = 0 \
+           AND date_cloture_approx IS NOT NULL \
+           AND date_cloture_approx >= ?2 \
+           AND date_cloture_approx < date(?3, '+1 day') \
+           AND {safe_col} IS NOT NULL AND {safe_col} != ''"
+    );
+    let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = vec![
+        Box::new(import_id),
+        Box::new(date_from.to_string()),
+        Box::new(date_to.to_string()),
+    ];
+
+    if let (Some(pc), Some(pv)) = (parent_col, parent_value) {
+        let safe_pc = match pc {
+            "categorie_niveau1" | "categorie_niveau2" => pc,
+            _ => return Ok(vec![]),
+        };
+        params.push(Box::new(pv.to_string()));
+        sql.push_str(&format!(" AND {} = ?{}", safe_pc, params.len()));
+    }
+
+    sql.push_str(&format!(" ORDER BY {safe_col}"));
+
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt
+        .query_map(rusqlite::params_from_iter(params.iter().map(|p| p.as_ref())), |row| {
+            row.get::<_, String>(0)
+        })?
+        .filter_map(|r| r.ok())
+        .collect();
+    Ok(rows)
+}
+
+/// Durées de résolution filtrées par catégorie (en jours).
+pub fn get_resolution_durations_filtered(
+    conn: &Connection,
+    date_from: &str,
+    date_to: &str,
+    cat_niveau1: Option<&str>,
+    cat_niveau2: Option<&str>,
+    categorie: Option<&str>,
+) -> Result<Vec<f64>, rusqlite::Error> {
+    let import_id = get_active_import_id(conn)?;
+    let mut sql = "\
+        SELECT julianday(date_cloture_approx) - julianday(date_ouverture) \
+        FROM tickets \
+        WHERE import_id = ?1 \
+          AND est_vivant = 0 \
+          AND date_cloture_approx IS NOT NULL \
+          AND date_ouverture IS NOT NULL \
+          AND date_cloture_approx >= ?2 \
+          AND date_cloture_approx < date(?3, '+1 day')".to_string();
+
+    let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = vec![
+        Box::new(import_id),
+        Box::new(date_from.to_string()),
+        Box::new(date_to.to_string()),
+    ];
+
+    if let Some(v) = categorie {
+        params.push(Box::new(v.to_string()));
+        sql.push_str(&format!(" AND categorie = ?{}", params.len()));
+    } else if let Some(v) = cat_niveau2 {
+        params.push(Box::new(v.to_string()));
+        sql.push_str(&format!(" AND categorie_niveau2 = ?{}", params.len()));
+    } else if let Some(v) = cat_niveau1 {
+        params.push(Box::new(v.to_string()));
+        sql.push_str(&format!(" AND categorie_niveau1 = ?{}", params.len()));
+    }
+
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt
+        .query_map(rusqlite::params_from_iter(params.iter().map(|p| p.as_ref())), |row| {
+            row.get::<_, f64>(0)
+        })?
+        .filter_map(|r| r.ok())
+        .filter(|v| *v >= 0.0)
+        .collect();
+    Ok(rows)
+}
+
+/// Durées de résolution groupées par catégorie.
+pub fn get_resolution_durations_by_category(
+    conn: &Connection,
+    date_from: &str,
+    date_to: &str,
+    cat_niveau1: Option<&str>,
+    cat_niveau2: Option<&str>,
+    categorie: Option<&str>,
+) -> Result<Vec<(String, Vec<f64>)>, rusqlite::Error> {
+    let import_id = get_active_import_id(conn)?;
+
+    let group_col = if categorie.is_some() {
+        "categorie"
+    } else if cat_niveau2.is_some() {
+        "categorie"
+    } else if cat_niveau1.is_some() {
+        "categorie_niveau2"
+    } else {
+        "categorie_niveau1"
+    };
+
+    let mut sql = format!(
+        "SELECT {group_col}, julianday(date_cloture_approx) - julianday(date_ouverture) \
+         FROM tickets \
+         WHERE import_id = ?1 \
+           AND est_vivant = 0 \
+           AND date_cloture_approx IS NOT NULL \
+           AND date_ouverture IS NOT NULL \
+           AND date_cloture_approx >= ?2 \
+           AND date_cloture_approx < date(?3, '+1 day') \
+           AND {group_col} IS NOT NULL AND {group_col} != ''"
+    );
+
+    let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = vec![
+        Box::new(import_id),
+        Box::new(date_from.to_string()),
+        Box::new(date_to.to_string()),
+    ];
+
+    if let Some(v) = categorie {
+        params.push(Box::new(v.to_string()));
+        sql.push_str(&format!(" AND categorie = ?{}", params.len()));
+    } else if let Some(v) = cat_niveau2 {
+        params.push(Box::new(v.to_string()));
+        sql.push_str(&format!(" AND categorie_niveau2 = ?{}", params.len()));
+    } else if let Some(v) = cat_niveau1 {
+        params.push(Box::new(v.to_string()));
+        sql.push_str(&format!(" AND categorie_niveau1 = ?{}", params.len()));
+    }
+
+    sql.push_str(&format!(" ORDER BY {group_col}"));
+
+    let mut stmt = conn.prepare(&sql)?;
+    let rows: Vec<(String, f64)> = stmt
+        .query_map(rusqlite::params_from_iter(params.iter().map(|p| p.as_ref())), |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?))
+        })?
+        .filter_map(|r| r.ok())
+        .filter(|(_, d)| *d >= 0.0)
+        .collect();
+
+    let mut map: std::collections::BTreeMap<String, Vec<f64>> = std::collections::BTreeMap::new();
+    for (cat, dur) in rows {
+        map.entry(cat).or_default().push(dur);
+    }
+    Ok(map.into_iter().collect())
+}
+
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
