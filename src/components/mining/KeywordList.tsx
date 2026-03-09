@@ -1,3 +1,4 @@
+import { X } from "lucide-react";
 import type { KeywordFrequency } from "../../types/mining";
 
 interface KeywordListProps {
@@ -5,6 +6,7 @@ interface KeywordListProps {
   title: string;
   maxItems?: number;
   onKeywordClick?: (word: string) => void;
+  onExclude?: (word: string) => void;
 }
 
 export default function KeywordList({
@@ -12,6 +14,7 @@ export default function KeywordList({
   title,
   maxItems = 20,
   onKeywordClick,
+  onExclude,
 }: KeywordListProps) {
   const items = keywords.slice(0, maxItems);
   const maxScore = items.length > 0 ? Math.max(...items.map((k) => k.tfidfScore)) : 1;
@@ -51,6 +54,18 @@ export default function KeywordList({
                   <span className="shrink-0 text-xs text-slate-400">
                     {kw.docFrequency} doc{kw.docFrequency > 1 ? "s" : ""}
                   </span>
+                  {onExclude && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onExclude(kw.word);
+                      }}
+                      className="shrink-0 opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 transition-opacity ml-1"
+                      title={`Exclure "${kw.word}"`}
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
                 </div>
               </button>
             </li>

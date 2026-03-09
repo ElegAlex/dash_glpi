@@ -128,9 +128,11 @@ function SettingsPage() {
     type: "success" | "error";
     text: string;
   } | null>(null);
+  const [stopwords, setStopwords] = useState<string[]>([]);
 
   useEffect(() => {
     loadConfig("get_config");
+    invoke<string[]>("get_user_stopwords").then(setStopwords).catch(console.error);
   }, []);
 
   useEffect(() => {
@@ -139,6 +141,14 @@ function SettingsPage() {
 
   const set = <K extends keyof AppConfig>(key: K, value: AppConfig[K]) => {
     setForm((prev) => (prev ? { ...prev, [key]: value } : prev));
+  };
+
+  const handleStopwordsChange = async (newWords: string[]) => {
+    const added = newWords.filter((w) => !stopwords.includes(w));
+    const removed = stopwords.filter((w) => !newWords.includes(w));
+    if (added.length > 0) await invoke("add_user_stopwords", { words: added });
+    if (removed.length > 0) await invoke("remove_user_stopwords", { words: removed });
+    setStopwords(newWords);
   };
 
   const handleSave = async () => {
@@ -317,6 +327,11 @@ function SettingsPage() {
                 Plus le seuil est eleve, moins il y aura de doublons detectes (defaut : 0.92)
               </p>
             </div>
+            <TagList
+              label="Mots exclus du Text Mining"
+              tags={stopwords}
+              onChange={handleStopwordsChange}
+            />
           </div>
         </SettingsCard>
         </div>

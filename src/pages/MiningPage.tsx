@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { Search, GitBranch, FileText, Hash } from "lucide-react";
 import { useInvoke } from "../hooks/useInvoke";
 import KeywordList from "../components/mining/KeywordList";
@@ -72,6 +73,12 @@ function MiningPage() {
   const [clusterVivants, setClusterVivants] = useState(true);
   const [drillDown, setDrillDown] = useState<{ title: string; tickets: TicketRef[] } | null>(null);
   const [selectedCluster, setSelectedCluster] = useState<ClusterInfo | null>(null);
+  const [excludedWords, setExcludedWords] = useState<Set<string>>(new Set());
+
+  const handleExclude = async (word: string) => {
+    await invoke("add_user_stopwords", { words: [word] });
+    setExcludedWords((prev) => new Set(prev).add(word));
+  };
 
   const analysisHook = useInvoke<TextAnalysisResult>();
   const coocHook = useInvoke<CooccurrenceResult>();
@@ -158,6 +165,7 @@ function MiningPage() {
   );
 
   const result = analysisHook.data;
+  const filteredKeywords = result ? result.keywords.filter((kw) => !excludedWords.has(kw.word)) : [];
 
   return (
     <div>
@@ -301,15 +309,16 @@ function MiningPage() {
                   />
                 </div>
 
-                {scope === "global" && result.keywords.length > 0 && (
+                {scope === "global" && filteredKeywords.length > 0 && (
                   <KeywordList
-                    keywords={result.keywords}
+                    keywords={filteredKeywords}
                     title="Mots-cles extraits"
                     maxItems={30}
                     onKeywordClick={(word) => {
                       const tickets = result.ticketMap[word] ?? [];
                       setDrillDown({ title: `Tickets contenant "${word}"`, tickets });
                     }}
+                    onExclude={handleExclude}
                   />
                 )}
 
