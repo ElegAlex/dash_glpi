@@ -5,6 +5,7 @@ import { useInvoke } from "../hooks/useInvoke";
 import KeywordList from "../components/mining/KeywordList";
 import CooccurrenceNetwork from "../components/mining/CooccurrenceNetwork";
 import DrillDownPanel from "../components/mining/DrillDownPanel";
+import MindMapPanel from "../components/mining/MindMapPanel";
 import ClusterView from "../components/mining/ClusterView";
 import ClusterDetailPanel from "../components/mining/ClusterDetailPanel";
 import { Card } from "../components/shared/Card";
@@ -74,6 +75,7 @@ function MiningPage() {
   const [drillDown, setDrillDown] = useState<{ title: string; tickets: TicketRef[] } | null>(null);
   const [selectedCluster, setSelectedCluster] = useState<ClusterInfo | null>(null);
   const [excludedWords, setExcludedWords] = useState<Set<string>>(new Set());
+  const [mindMapWord, setMindMapWord] = useState<string | null>(null);
 
   const handleExclude = async (word: string) => {
     await invoke("add_user_stopwords", { words: [word] });
@@ -314,10 +316,7 @@ function MiningPage() {
                     keywords={filteredKeywords}
                     title="Mots-cles extraits"
                     maxItems={30}
-                    onKeywordClick={(word) => {
-                      const tickets = result.ticketMap[word] ?? [];
-                      setDrillDown({ title: `Tickets contenant "${word}"`, tickets });
-                    }}
+                    onKeywordClick={(word) => setMindMapWord(word)}
                     onExclude={handleExclude}
                   />
                 )}
@@ -468,6 +467,15 @@ function MiningPage() {
           loading={clusterDetailHook.loading}
           error={clusterDetailHook.error}
           onClose={() => setSelectedCluster(null)}
+        />
+      )}
+
+      {mindMapWord && (
+        <MindMapPanel
+          word={mindMapWord}
+          includeResolved={includeResolved}
+          onClose={() => setMindMapWord(null)}
+          onNavigate={(w) => setMindMapWord(w)}
         />
       )}
     </div>

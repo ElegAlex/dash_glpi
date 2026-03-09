@@ -1,7 +1,7 @@
 import { useRef, useEffect, useCallback } from 'react';
 import type { ECharts, EChartsCoreOption } from 'echarts/core';
 import * as echarts from 'echarts/core';
-import { TreemapChart, SunburstChart, HeatmapChart, SankeyChart, LineChart, BarChart, GraphChart, PieChart } from 'echarts/charts';
+import { TreemapChart, SunburstChart, HeatmapChart, SankeyChart, LineChart, BarChart, GraphChart, PieChart, TreeChart } from 'echarts/charts';
 import {
   TooltipComponent,
   VisualMapComponent,
@@ -15,7 +15,7 @@ import { CanvasRenderer } from 'echarts/renderers';
 import { UniversalTransition } from 'echarts/features';
 
 echarts.use([
-  TreemapChart, SunburstChart, HeatmapChart, SankeyChart, LineChart, BarChart, GraphChart, PieChart,
+  TreemapChart, SunburstChart, HeatmapChart, SankeyChart, LineChart, BarChart, GraphChart, PieChart, TreeChart,
   TooltipComponent, VisualMapComponent, LegendComponent,
   ToolboxComponent, GridComponent, TitleComponent, MarkLineComponent,
   CanvasRenderer, UniversalTransition,
