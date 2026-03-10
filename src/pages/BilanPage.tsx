@@ -44,12 +44,12 @@ function ResolutionChart({ resolution }: { resolution: BilanResolution }) {
         },
       },
       grid: { left: 100, right: 60, top: 10, bottom: 30 },
-      xAxis: { type: 'value' as const },
+      xAxis: { type: 'value' as const, axisLabel: { fontSize: 10 } },
       yAxis: {
         type: 'category' as const,
         data: labels,
         inverse: true,
-        axisLabel: { fontFamily: 'DM Sans' },
+        axisLabel: { fontFamily: 'DM Sans', fontSize: 10 },
       },
       series: [
         {

@@ -34,6 +34,7 @@ export function VolumeChart({ data }: VolumeChartProps) {
       legend: {
         data: ['Crees', 'Resolus'],
         top: 8,
+        textStyle: { fontSize: 8 },
       },
       grid: {
         left: 50,
@@ -45,12 +46,14 @@ export function VolumeChart({ data }: VolumeChartProps) {
       xAxis: {
         type: 'category' as const,
         data: labels,
-        axisLabel: { rotate: labels.length > 6 ? 90 : 0 },
+        axisLabel: { rotate: labels.length > 6 ? 90 : 0, fontSize: 10 },
       },
       yAxis: {
         type: 'value' as const,
         name: 'Tickets',
+        nameTextStyle: { fontSize: 10 },
         minInterval: 1,
+        axisLabel: { fontSize: 10 },
       },
       series: [
         {

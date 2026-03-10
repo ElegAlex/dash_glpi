@@ -33,6 +33,7 @@ export function MttrTrendChart({ data }: MttrTrendChartProps) {
       legend: {
         data: ['MTTR moyen', 'Mediane'],
         top: 8,
+        textStyle: { fontSize: 8 },
       },
       grid: {
         left: 50,
@@ -44,12 +45,14 @@ export function MttrTrendChart({ data }: MttrTrendChartProps) {
       xAxis: {
         type: 'category' as const,
         data: labels,
-        axisLabel: { rotate: labels.length > 6 ? 90 : 0 },
+        axisLabel: { rotate: labels.length > 6 ? 90 : 0, fontSize: 10 },
       },
       yAxis: {
         type: 'value' as const,
         name: 'Jours',
+        nameTextStyle: { fontSize: 10 },
         minInterval: 1,
+        axisLabel: { fontSize: 10 },
       },
       series: [
         {

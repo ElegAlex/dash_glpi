@@ -49,18 +49,21 @@ function TrendChart({ data }: { data: DelaisKpi }) {
       legend: {
         data: ['Taux 24h', 'Taux 48h'],
         top: 8,
+        textStyle: { fontSize: 8 },
       },
       grid: { top: 60, bottom: 30, left: 50, right: 30, containLabel: true },
       xAxis: {
         type: 'category' as const,
         data: labels,
-        axisLabel: { rotate: labels.length > 6 ? 90 : 0 },
+        axisLabel: { rotate: labels.length > 6 ? 90 : 0, fontSize: 10 },
       },
       yAxis: {
         type: 'value' as const,
         name: '%',
+        nameTextStyle: { fontSize: 10 },
         max: 100,
         minInterval: 10,
+        axisLabel: { fontSize: 10 },
       },
       series: [
         {
@@ -140,12 +143,12 @@ function DistributionChart({ tranches }: { tranches: TrancheDelai[] }) {
         },
       },
       grid: { left: 100, right: 60, top: 10, bottom: 30 },
-      xAxis: { type: 'value' as const },
+      xAxis: { type: 'value' as const, axisLabel: { fontSize: 10 } },
       yAxis: {
         type: 'category' as const,
         data: labels,
         inverse: true,
-        axisLabel: { fontFamily: 'DM Sans' },
+        axisLabel: { fontFamily: 'DM Sans', fontSize: 10 },
       },
       series: [
         {

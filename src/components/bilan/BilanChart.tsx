@@ -32,6 +32,7 @@ export function BilanChart({ periodes }: BilanChartProps) {
       legend: {
         data: ['Entrants', 'Sortants', ...(hasStock ? ['Stock net'] : [])],
         top: 8,
+        textStyle: { fontSize: 8 },
       },
       toolbox: {
         feature: {
@@ -50,19 +51,21 @@ export function BilanChart({ periodes }: BilanChartProps) {
       xAxis: {
         type: 'category',
         data: labels,
-        axisLabel: { rotate: labels.length > 6 ? 90 : 0 },
+        axisLabel: { rotate: labels.length > 6 ? 90 : 0, fontSize: 10 },
       },
       yAxis: [
         {
           type: 'value',
           name: 'Tickets',
+          nameTextStyle: { fontSize: 10 },
           minInterval: 1,
           axisLabel: {
+            fontSize: 10,
             formatter: (v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v),
           },
         },
         needSecondaryAxis
-          ? { type: 'value', name: 'Stock', position: 'right', splitLine: { show: false } }
+          ? { type: 'value', name: 'Stock', nameTextStyle: { fontSize: 10 }, position: 'right', splitLine: { show: false } }
           : { type: 'value', show: false },
       ],
       dataZoom: [

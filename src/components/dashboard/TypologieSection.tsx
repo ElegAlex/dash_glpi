@@ -41,11 +41,12 @@ function SoldeEvolutionChart({ data, stockDebut }: { data: VolumePeriode[]; stoc
       xAxis: {
         type: 'category' as const,
         data: periodes,
-        axisLabel: { rotate: periodes.length > 6 ? 90 : 0 },
+        axisLabel: { rotate: periodes.length > 6 ? 90 : 0, fontSize: 10 },
       },
       yAxis: {
         type: 'value' as const,
         splitLine: { lineStyle: { type: 'dashed' as const, color: '#F1F5F9' } },
+        axisLabel: { fontSize: 10 },
       },
       series: [
         {

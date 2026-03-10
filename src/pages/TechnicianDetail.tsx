@@ -72,12 +72,12 @@ function HistoriqueCharts({ periodes }: { periodes: TechHistoryPeriod[] }) {
     const keys = periodes.map((p) => p.periodKey);
     return {
       tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
-      legend: { data: ['Entrants', 'Sortants', 'Stock cumule'], bottom: 0 },
+      legend: { data: ['Entrants', 'Sortants', 'Stock cumule'], bottom: 0, textStyle: { fontSize: 8 } },
       grid: { left: 55, right: 55, top: 30, bottom: 30, containLabel: true },
-      xAxis: { type: 'category', data: keys, axisLabel: { rotate: keys.length > 6 ? 90 : 0 } },
+      xAxis: { type: 'category', data: keys, axisLabel: { rotate: keys.length > 6 ? 90 : 0, fontSize: 10 } },
       yAxis: [
-        { type: 'value', name: 'Volume', position: 'left' },
-        { type: 'value', name: 'Stock', position: 'right' },
+        { type: 'value', name: 'Volume', nameTextStyle: { fontSize: 10 }, position: 'left', axisLabel: { fontSize: 10 } },
+        { type: 'value', name: 'Stock', nameTextStyle: { fontSize: 10 }, position: 'right', axisLabel: { fontSize: 10 } },
       ],
       series: [
         {
@@ -131,8 +131,8 @@ function HistoriqueCharts({ periodes }: { periodes: TechHistoryPeriod[] }) {
         },
       },
       grid: { left: 55, right: 20, top: 30, bottom: 30, containLabel: true },
-      xAxis: { type: 'category', data: withMttr.map((p) => p.periodKey), axisLabel: { rotate: withMttr.length > 6 ? 90 : 0 } },
-      yAxis: { type: 'value', name: 'Jours' },
+      xAxis: { type: 'category', data: withMttr.map((p) => p.periodKey), axisLabel: { rotate: withMttr.length > 6 ? 90 : 0, fontSize: 10 } },
+      yAxis: { type: 'value', name: 'Jours', nameTextStyle: { fontSize: 10 }, axisLabel: { fontSize: 10 } },
       series: [
         {
           name: 'MTTR',

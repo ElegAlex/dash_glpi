@@ -37,12 +37,14 @@ export function DistributionDelaisChart({ data }: DistributionDelaisChartProps) 
       xAxis: {
         type: 'value' as const,
         name: 'Tickets',
+        nameTextStyle: { fontSize: 10 },
+        axisLabel: { fontSize: 10 },
       },
       yAxis: {
         type: 'category' as const,
         data: labels,
         inverse: true,
-        axisLabel: {},
+        axisLabel: { fontSize: 10 },
       },
       series: [
         {

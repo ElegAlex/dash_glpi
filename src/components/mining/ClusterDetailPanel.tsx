@@ -25,12 +25,12 @@ function HorizontalBarChart({ data, title }: { data: { label: string; count: num
     return {
       tooltip: { trigger: 'axis' as const, axisPointer: { type: 'shadow' as const } },
       grid: { left: 130, right: 30, top: 10, bottom: 20 },
-      xAxis: { type: 'value' as const },
+      xAxis: { type: 'value' as const, axisLabel: { fontSize: 10 } },
       yAxis: {
         type: 'category' as const,
         data: top10.map((d) => d.label),
         inverse: true,
-        axisLabel: { width: 115, overflow: 'truncate' as const },
+        axisLabel: { width: 115, overflow: 'truncate' as const, fontSize: 10 },
       },
       series: [{
         type: 'bar' as const,
@@ -67,11 +67,12 @@ function EvolutionLineChart({ data }: { data: { periode: string; count: number }
     xAxis: {
       type: 'category' as const,
       data: data.map((d) => d.periode),
-      axisLabel: { rotate: data.length > 6 ? 90 : 0 },
+      axisLabel: { rotate: data.length > 6 ? 90 : 0, fontSize: 10 },
     },
     yAxis: {
       type: 'value' as const,
       splitLine: { lineStyle: { type: 'dashed' as const, color: '#F1F5F9' } },
+      axisLabel: { fontSize: 10 },
     },
     series: [{
       type: 'line' as const,
