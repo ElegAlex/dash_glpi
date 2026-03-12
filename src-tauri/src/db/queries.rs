@@ -17,7 +17,7 @@ pub(crate) fn get_active_import_id(conn: &Connection) -> Result<i64, rusqlite::E
     )
 }
 
-fn get_seuil_tickets(conn: &Connection) -> i64 {
+pub(crate) fn get_seuil_tickets(conn: &Connection) -> i64 {
     conn.query_row(
         "SELECT CAST(value AS INTEGER) FROM config WHERE key = 'seuil_tickets_technicien'",
         [],
@@ -1604,6 +1604,133 @@ mod tests {
         assert_eq!(couleur_charge(41, 20), "rouge");  // > 2.0 → rouge
         assert_eq!(couleur_charge(5, 0), "rouge");    // seuil 0 → rouge
     }
+}
+
+// ─── Fonctions Recommandation / Profiling ─────────────────────────────────────
+
+/// Fetch resolved tickets from the last N months for profiling.
+pub fn get_profiling_tickets(
+    conn: &Connection,
+    import_id: i64,
+    months_back: i64,
+) -> Result<Vec<(String, String, Option<String>, Option<String>)>, rusqlite::Error> {
+    let date_cutoff = chrono::Utc::now()
+        .naive_utc()
+        .date()
+        .checked_sub_months(chrono::Months::new(months_back as u32))
+        .unwrap_or(chrono::NaiveDate::from_ymd_opt(2000, 1, 1).unwrap())
+        .format("%Y-%m-%d")
+        .to_string();
+
+    let mut stmt = conn.prepare(
+        "SELECT technicien_principal, titre, categorie_niveau1, categorie_niveau2
+         FROM tickets
+         WHERE import_id = ?1
+           AND est_vivant = 0
+           AND technicien_principal IS NOT NULL
+           AND COALESCE(date_resolution, date_cloture_approx, derniere_modification) >= ?2"
+    )?;
+
+    let rows = stmt.query_map(rusqlite::params![import_id, date_cutoff], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, Option<String>>(2)?,
+            row.get::<_, Option<String>>(3)?,
+        ))
+    })?;
+
+    rows.collect()
+}
+
+/// Fetch unassigned vivant tickets for attribution, ordered by ancienneté DESC, limited.
+pub fn get_unassigned_tickets_for_attribution(
+    conn: &Connection,
+    import_id: i64,
+    limit: usize,
+) -> Result<Vec<(i64, String, Option<String>, Option<String>)>, rusqlite::Error> {
+    let mut stmt = conn.prepare(
+        "SELECT id, titre, categorie_niveau1, categorie_niveau2
+         FROM tickets
+         WHERE import_id = ?1
+           AND est_vivant = 1
+           AND (technicien_principal IS NULL OR technicien_principal = '')
+         ORDER BY anciennete_jours DESC
+         LIMIT ?2"
+    )?;
+
+    let rows = stmt.query_map(rusqlite::params![import_id, limit], |row| {
+        Ok((
+            row.get::<_, i64>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, Option<String>>(2)?,
+            row.get::<_, Option<String>>(3)?,
+        ))
+    })?;
+
+    rows.collect()
+}
+
+/// Get vivant ticket count per technician.
+pub fn get_technician_stock_counts(
+    conn: &Connection,
+    import_id: i64,
+) -> Result<std::collections::HashMap<String, usize>, rusqlite::Error> {
+    let mut stmt = conn.prepare(
+        "SELECT technicien_principal, COUNT(*) as cnt
+         FROM tickets
+         WHERE import_id = ?1
+           AND est_vivant = 1
+           AND technicien_principal IS NOT NULL
+           AND technicien_principal != ''
+         GROUP BY technicien_principal"
+    )?;
+
+    let mut map = std::collections::HashMap::new();
+    let rows = stmt.query_map(rusqlite::params![import_id], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, usize>(1)?))
+    })?;
+
+    for row in rows {
+        let (tech, count) = row?;
+        map.insert(tech, count);
+    }
+
+    Ok(map)
+}
+
+/// Read cached profiling data from analytics_cache.
+pub fn get_cached_profiling(
+    conn: &Connection,
+    import_id: i64,
+) -> Result<Option<String>, rusqlite::Error> {
+    let result = conn.query_row(
+        "SELECT result FROM analytics_cache
+         WHERE import_id = ?1 AND analysis_type = 'technician_profiles' AND parameters = '{}'",
+        rusqlite::params![import_id],
+        |row| row.get::<_, String>(0),
+    );
+
+    match result {
+        Ok(json) => Ok(Some(json)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
+/// Write profiling data to analytics_cache.
+pub fn save_cached_profiling(
+    conn: &Connection,
+    import_id: i64,
+    json_result: &str,
+    duration_ms: i64,
+) -> Result<(), rusqlite::Error> {
+    conn.execute(
+        "INSERT OR REPLACE INTO analytics_cache (import_id, analysis_type, parameters, result, duration_ms)
+         VALUES (?1, 'technician_profiles', '{}', ?2, ?3)",
+        rusqlite::params![import_id, json_result, duration_ms],
+    )?;
+    Ok(())
 }
 
 // ─── Tests Bilan temporel ─────────────────────────────────────────────────────
