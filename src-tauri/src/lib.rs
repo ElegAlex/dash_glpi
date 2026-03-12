@@ -163,6 +163,9 @@ pub fn run() {
             commands::delais::get_delais_kpi,
             commands::delais::get_distinct_categories_for_delais,
             commands::delais::get_delais_par_categorie,
+            // Recommandation / Attribution
+            commands::recommandation::build_technician_profiles,
+            commands::recommandation::get_assignment_recommendations,
         ])
         .run(tauri::generate_context!());
 

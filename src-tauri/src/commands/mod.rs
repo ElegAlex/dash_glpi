@@ -9,3 +9,4 @@ pub mod config;
 pub mod search;
 pub mod analytics;
 pub mod delais;
+pub mod recommandation;
