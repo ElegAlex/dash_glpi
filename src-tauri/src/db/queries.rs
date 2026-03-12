@@ -1609,7 +1609,7 @@ mod tests {
 // ─── Fonctions Recommandation / Profiling ─────────────────────────────────────
 
 /// Fetch resolved tickets from the last N months for profiling.
-pub fn get_profiling_tickets(
+pub(crate) fn get_profiling_tickets(
     conn: &Connection,
     import_id: i64,
     months_back: i64,
@@ -1644,7 +1644,7 @@ pub fn get_profiling_tickets(
 }
 
 /// Fetch unassigned vivant tickets for attribution, ordered by ancienneté DESC, limited.
-pub fn get_unassigned_tickets_for_attribution(
+pub(crate) fn get_unassigned_tickets_for_attribution(
     conn: &Connection,
     import_id: i64,
     limit: usize,
@@ -1672,7 +1672,7 @@ pub fn get_unassigned_tickets_for_attribution(
 }
 
 /// Get vivant ticket count per technician.
-pub fn get_technician_stock_counts(
+pub(crate) fn get_technician_stock_counts(
     conn: &Connection,
     import_id: i64,
 ) -> Result<std::collections::HashMap<String, usize>, rusqlite::Error> {
@@ -1700,7 +1700,7 @@ pub fn get_technician_stock_counts(
 }
 
 /// Read cached profiling data from analytics_cache.
-pub fn get_cached_profiling(
+pub(crate) fn get_cached_profiling(
     conn: &Connection,
     import_id: i64,
 ) -> Result<Option<String>, rusqlite::Error> {
@@ -1719,7 +1719,7 @@ pub fn get_cached_profiling(
 }
 
 /// Write profiling data to analytics_cache.
-pub fn save_cached_profiling(
+pub(crate) fn save_cached_profiling(
     conn: &Connection,
     import_id: i64,
     json_result: &str,
