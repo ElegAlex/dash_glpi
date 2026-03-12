@@ -1,4 +1,22 @@
 use sprs::CsMat;
+use std::collections::HashMap;
+use super::types::{
+    AssignmentRecommendation, CachedProfilingData, TechnicianSuggestion,
+};
+
+/// A ticket to be scored for assignment.
+pub struct UnassignedTicket {
+    pub id: i64,
+    pub titre: String,
+    pub categorie_niveau1: Option<String>,
+    pub categorie_niveau2: Option<String>,
+}
+
+/// Stock count per technician (name → vivant ticket count).
+pub type TechnicianStockMap = HashMap<String, usize>;
+
+const POIDS_CATEGORIE: f64 = 0.4;
+const POIDS_TFIDF: f64 = 0.6;
 
 /// Cosine similarity between two L2-normalized sparse vectors.
 /// Inputs are assumed L2-normalized; divides by norms for correctness
@@ -101,6 +119,109 @@ pub fn project_to_vocabulary(
     weighted
 }
 
+/// Score unassigned tickets against technician profiles.
+pub fn score_tickets(
+    tickets: &[UnassignedTicket],
+    profiling_data: &CachedProfilingData,
+    stock_map: &TechnicianStockMap,
+    seuil_tickets: f64,
+    limit: usize,
+    score_minimum: f64,
+) -> Vec<AssignmentRecommendation> {
+    use crate::nlp::preprocessing::{StopWordFilter, preprocess_text};
+
+    if tickets.is_empty() || profiling_data.profiles.is_empty() {
+        return tickets
+            .iter()
+            .map(|t| AssignmentRecommendation {
+                ticket_id: t.id,
+                ticket_titre: t.titre.clone(),
+                ticket_categorie: t.categorie_niveau2.clone().or(t.categorie_niveau1.clone()),
+                suggestions: Vec::new(),
+            })
+            .collect();
+    }
+
+    let filter = StopWordFilter::new();
+
+    tickets
+        .iter()
+        .map(|ticket| {
+            let stems = preprocess_text(&ticket.titre, &filter);
+            let vec_ticket = project_to_vocabulary(
+                &stems,
+                &profiling_data.vocabulary,
+                &profiling_data.idf_values,
+            );
+
+            let cat_ticket = ticket
+                .categorie_niveau2
+                .as_deref()
+                .or(ticket.categorie_niveau1.as_deref());
+
+            let has_category = cat_ticket.is_some()
+                && cat_ticket != Some("SANS_CATEGORIE");
+
+            let mut suggestions: Vec<TechnicianSuggestion> = profiling_data
+                .profiles
+                .iter()
+                .map(|profile| {
+                    let score_tfidf =
+                        cosine_similarity_sparse(&vec_ticket, &profile.centroide_tfidf);
+
+                    let (score_cat, w_cat, w_tfidf) = if has_category {
+                        let cat = cat_ticket.unwrap();
+                        let sc = profile
+                            .cat_distribution
+                            .get(cat)
+                            .copied()
+                            .unwrap_or(0.0);
+                        (sc, POIDS_CATEGORIE, POIDS_TFIDF)
+                    } else {
+                        (0.0, 0.0, 1.0)
+                    };
+
+                    let score_competence = w_cat * score_cat + w_tfidf * score_tfidf;
+
+                    let stock = stock_map
+                        .get(&profile.technicien)
+                        .copied()
+                        .unwrap_or(0);
+                    let facteur_charge =
+                        1.0 / (1.0 + stock as f64 / seuil_tickets);
+
+                    let score_final = score_competence * facteur_charge;
+
+                    TechnicianSuggestion {
+                        technicien: profile.technicien.clone(),
+                        score_final,
+                        score_competence,
+                        score_categorie: score_cat,
+                        score_tfidf,
+                        stock_actuel: stock,
+                        facteur_charge,
+                    }
+                })
+                .filter(|s| s.score_final >= score_minimum)
+                .collect();
+
+            suggestions.sort_by(|a, b| {
+                b.score_final
+                    .partial_cmp(&a.score_final)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+            suggestions.truncate(limit);
+
+            AssignmentRecommendation {
+                ticket_id: ticket.id,
+                ticket_titre: ticket.titre.clone(),
+                ticket_categorie: cat_ticket.map(|s| s.to_string()),
+                suggestions,
+            }
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -193,5 +314,157 @@ mod tests {
         let reseau = result.iter().find(|(i, _)| *i == 1).unwrap().1;
         assert!((imprim - 0.7856).abs() < 0.01, "got {imprim}");
         assert!((reseau - 0.6187).abs() < 0.01, "got {reseau}");
+    }
+
+    use crate::recommandation::types::TechnicianProfile;
+
+    fn make_profiling_data() -> CachedProfilingData {
+        let mut vocab = HashMap::new();
+        vocab.insert("imprim".to_string(), 0);
+        vocab.insert("reseau".to_string(), 1);
+        vocab.insert("sap".to_string(), 2);
+        vocab.insert("acces".to_string(), 3);
+
+        let idf = vec![1.5, 1.2, 2.0, 1.8];
+
+        let mut cat_dupont = HashMap::new();
+        cat_dupont.insert("Imprimante".to_string(), 0.8);
+        cat_dupont.insert("Réseau".to_string(), 0.2);
+
+        let mut cat_leroy = HashMap::new();
+        cat_leroy.insert("Habilitations".to_string(), 0.9);
+        cat_leroy.insert("Imprimante".to_string(), 0.1);
+
+        CachedProfilingData {
+            profiles: vec![
+                TechnicianProfile {
+                    technicien: "Dupont".to_string(),
+                    nb_tickets_reference: 50,
+                    cat_distribution: cat_dupont,
+                    centroide_tfidf: vec![(0, 0.8), (1, 0.6)],
+                },
+                TechnicianProfile {
+                    technicien: "Leroy".to_string(),
+                    nb_tickets_reference: 30,
+                    cat_distribution: cat_leroy,
+                    centroide_tfidf: vec![(2, 0.7), (3, 0.7)],
+                },
+            ],
+            vocabulary: vocab,
+            idf_values: idf,
+            vocabulary_size: 4,
+            nb_tickets_analysed: 80,
+            periode_from: "2025-09-12".to_string(),
+            periode_to: "2026-03-12".to_string(),
+        }
+    }
+
+    #[test]
+    fn test_score_tickets_imprimante_favors_dupont() {
+        let data = make_profiling_data();
+        let tickets = vec![UnassignedTicket {
+            id: 1,
+            titre: "imprimante réseau bloquée".to_string(),
+            categorie_niveau1: Some("Matériel".to_string()),
+            categorie_niveau2: Some("Imprimante".to_string()),
+        }];
+        let mut stock = HashMap::new();
+        stock.insert("Dupont".to_string(), 10_usize);
+        stock.insert("Leroy".to_string(), 10_usize);
+
+        let results = score_tickets(&tickets, &data, &stock, 20.0, 3, 0.0);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].suggestions[0].technicien, "Dupont");
+        assert!(results[0].suggestions[0].score_final > results[0].suggestions[1].score_final);
+    }
+
+    #[test]
+    fn test_score_tickets_sap_favors_leroy() {
+        let data = make_profiling_data();
+        let tickets = vec![UnassignedTicket {
+            id: 2,
+            titre: "accès SAP refusé nouvel agent".to_string(),
+            categorie_niveau1: Some("Habilitations".to_string()),
+            categorie_niveau2: None,
+        }];
+        let mut stock = HashMap::new();
+        stock.insert("Dupont".to_string(), 10_usize);
+        stock.insert("Leroy".to_string(), 10_usize);
+
+        let results = score_tickets(&tickets, &data, &stock, 20.0, 3, 0.0);
+        assert_eq!(results[0].suggestions[0].technicien, "Leroy");
+    }
+
+    #[test]
+    fn test_score_tickets_high_stock_penalizes() {
+        let data = make_profiling_data();
+        let tickets = vec![UnassignedTicket {
+            id: 3,
+            titre: "imprimante réseau bloquée".to_string(),
+            categorie_niveau1: Some("Matériel".to_string()),
+            categorie_niveau2: Some("Imprimante".to_string()),
+        }];
+        let mut stock = HashMap::new();
+        stock.insert("Dupont".to_string(), 60_usize);
+        stock.insert("Leroy".to_string(), 2_usize);
+
+        let results = score_tickets(&tickets, &data, &stock, 20.0, 3, 0.0);
+        let dupont = results[0].suggestions.iter().find(|s| s.technicien == "Dupont").unwrap();
+        let leroy = results[0].suggestions.iter().find(|s| s.technicien == "Leroy").unwrap();
+        assert!(dupont.facteur_charge < leroy.facteur_charge);
+    }
+
+    #[test]
+    fn test_score_tickets_no_category_full_tfidf() {
+        let data = make_profiling_data();
+        let tickets = vec![UnassignedTicket {
+            id: 4,
+            titre: "imprimante réseau bloquée".to_string(),
+            categorie_niveau1: None,
+            categorie_niveau2: None,
+        }];
+        let mut stock = HashMap::new();
+        stock.insert("Dupont".to_string(), 10_usize);
+        stock.insert("Leroy".to_string(), 10_usize);
+
+        let results = score_tickets(&tickets, &data, &stock, 20.0, 3, 0.0);
+        let dupont = results[0].suggestions.iter().find(|s| s.technicien == "Dupont").unwrap();
+        assert!((dupont.score_categorie - 0.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_score_tickets_respects_limit() {
+        let data = make_profiling_data();
+        let tickets = vec![UnassignedTicket {
+            id: 5,
+            titre: "test".to_string(),
+            categorie_niveau1: None,
+            categorie_niveau2: None,
+        }];
+        let stock = HashMap::new();
+        let results = score_tickets(&tickets, &data, &stock, 20.0, 1, 0.0);
+        assert!(results[0].suggestions.len() <= 1);
+    }
+
+    #[test]
+    fn test_score_tickets_filters_below_minimum() {
+        let data = make_profiling_data();
+        let tickets = vec![UnassignedTicket {
+            id: 6,
+            titre: "quelque chose de totalement inconnu zzzzz".to_string(),
+            categorie_niveau1: Some("CatégorieInexistante".to_string()),
+            categorie_niveau2: None,
+        }];
+        let stock = HashMap::new();
+        let results = score_tickets(&tickets, &data, &stock, 20.0, 3, 0.99);
+        assert!(results[0].suggestions.is_empty());
+    }
+
+    #[test]
+    fn test_score_tickets_empty_tickets() {
+        let data = make_profiling_data();
+        let stock = HashMap::new();
+        let results = score_tickets(&[], &data, &stock, 20.0, 3, 0.05);
+        assert!(results.is_empty());
     }
 }
