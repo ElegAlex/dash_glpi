@@ -15,3 +15,4 @@ export type {
 } from "./kpi";
 export type { AppConfig, ImportHistory } from "./config";
 export type * from './dashboard';
+export type * from './recommandation';
