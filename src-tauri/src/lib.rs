@@ -7,6 +7,7 @@ mod error;
 mod export;
 mod nlp;
 mod parser;
+mod recommandation;
 mod state;
 
 use state::AppState;
