@@ -268,9 +268,12 @@ function UnassignedDrawer({ onClose }: { onClose: () => void }) {
   );
 }
 
+type StockTab = 'overview' | 'attribution';
+
 function StockPage() {
   const { statut, typeTicket, groupe, resetFilters, setStatut, setTypeTicket, setGroupe } = useFilterStore();
   const [showUnassigned, setShowUnassigned] = useState(false);
+  const [activeTab, setActiveTab] = useState<StockTab>('overview');
 
   const overviewHook = useInvoke<StockOverview>();
   const techHook = useInvoke<TechnicianStats[]>();
@@ -316,8 +319,8 @@ function StockPage() {
 
   return (
     <div>
-      <header className="sticky top-0 z-10 bg-[#F5F7FA]/80 backdrop-blur-sm px-8 pt-6 pb-4 border-b border-slate-200/30">
-        <div className="flex items-center justify-between">
+      <header className="sticky top-0 z-10 bg-[#F5F7FA]/80 backdrop-blur-sm px-8 pt-6 pb-0">
+        <div className="flex items-center justify-between mb-4">
           <div>
             <h1 className="text-2xl font-bold font-[DM_Sans] text-slate-800 tracking-tight">
               Dashboard Stock
@@ -330,118 +333,145 @@ function StockPage() {
             <span className="text-sm text-slate-400">Chargement...</span>
           )}
         </div>
+
+        {/* Tab bar */}
+        <div className="flex gap-1">
+          {([
+            { key: 'overview' as StockTab, label: 'Vue d\u2019ensemble' },
+            { key: 'attribution' as StockTab, label: 'Attribution intelligente' },
+          ]).map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`px-4 py-2.5 text-sm font-semibold font-[DM_Sans] rounded-t-xl transition-all duration-150
+                ${activeTab === tab.key
+                  ? 'text-[#0C419A] bg-white shadow-[0_-1px_3px_rgba(0,0,0,0.06)]'
+                  : 'text-slate-400 hover:text-slate-600 hover:bg-white/50'
+                }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </header>
 
       <div className="px-8 pb-8 pt-6 space-y-6">
-        {overviewHook.error && (
-          <div className="rounded-2xl bg-danger-50 shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)] px-4 py-3 text-sm text-danger-500">
-            {overviewHook.error}
-          </div>
-        )}
-
-        <div className="animate-fade-slide-up">
-          {overviewHook.data && (
-            <KpiCards
-              overview={overviewHook.data}
-              onUnassignedClick={() => setShowUnassigned(true)}
-            />
-          )}
-        </div>
-
-        {/* Age distribution */}
-        {overviewHook.data && overviewHook.data.parAnciennete.length > 0 && (
-          <div className="animate-fade-slide-up animation-delay-150">
-            <Card>
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold font-[DM_Sans] text-slate-700">
-                  Distribution de l'age des tickets
-                </h3>
-                <span className="text-xs text-slate-400">
-                  {overviewHook.data.totalVivants.toLocaleString('fr-FR')} tickets vivants
-                </span>
+        {/* ── Onglet Vue d'ensemble ── */}
+        {activeTab === 'overview' && (
+          <>
+            {overviewHook.error && (
+              <div className="rounded-2xl bg-danger-50 shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)] px-4 py-3 text-sm text-danger-500">
+                {overviewHook.error}
               </div>
-              <AgeDistributionChart data={overviewHook.data.parAnciennete} />
-            </Card>
-          </div>
-        )}
+            )}
 
-        {/* Filter bar */}
-        <div className="animate-fade-slide-up animation-delay-150">
-          <Card padding="sm">
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="text-sm font-medium text-slate-500">Filtres :</span>
-
-              <select
-                value={statut ?? ''}
-                onChange={(e) => setStatut(e.target.value || null)}
-                className="rounded-lg bg-slate-50 px-3 py-1.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
-              >
-                <option value="">Tous statuts</option>
-                {statutOptions.map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
-
-              <select
-                value={typeTicket ?? ''}
-                onChange={(e) => setTypeTicket(e.target.value || null)}
-                className="rounded-lg bg-slate-50 px-3 py-1.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
-              >
-                <option value="">Tous types</option>
-                {typeOptions.map((t) => (
-                  <option key={t} value={t}>{t}</option>
-                ))}
-              </select>
-
-              <select
-                value={groupe ?? ''}
-                onChange={(e) => setGroupe(e.target.value || null)}
-                className="rounded-lg bg-slate-50 px-3 py-1.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
-              >
-                <option value="">Tous groupes</option>
-                {groupOptions.map((g) => (
-                  <option key={g} value={g}>{g}</option>
-                ))}
-              </select>
-
-              {(statut || typeTicket || groupe) && (
-                <button
-                  onClick={resetFilters}
-                  className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm text-slate-500 hover:bg-slate-200 transition-colors"
-                >
-                  Reinitialiser
-                </button>
+            <div className="animate-fade-slide-up">
+              {overviewHook.data && (
+                <KpiCards
+                  overview={overviewHook.data}
+                  onUnassignedClick={() => setShowUnassigned(true)}
+                />
               )}
             </div>
-          </Card>
-        </div>
 
-        {/* Category distribution */}
-        {catHook.data && catHook.data.nodes.length > 0 && (
-          <div className="animate-fade-slide-up animation-delay-300">
-            <Card>
-              <h3 className="text-sm font-semibold font-[DM_Sans] text-slate-700 mb-3">
-                {catHook.data.source === 'categorie' ? 'Repartition par categorie' : 'Repartition par groupe'}
-              </h3>
-              <CategoryBarChart tree={catHook.data} />
-            </Card>
-          </div>
+            {/* Age distribution */}
+            {overviewHook.data && overviewHook.data.parAnciennete.length > 0 && (
+              <div className="animate-fade-slide-up animation-delay-150">
+                <Card>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-semibold font-[DM_Sans] text-slate-700">
+                      Distribution de l'age des tickets
+                    </h3>
+                    <span className="text-xs text-slate-400">
+                      {overviewHook.data.totalVivants.toLocaleString('fr-FR')} tickets vivants
+                    </span>
+                  </div>
+                  <AgeDistributionChart data={overviewHook.data.parAnciennete} />
+                </Card>
+              </div>
+            )}
+
+            {/* Filter bar */}
+            <div className="animate-fade-slide-up animation-delay-150">
+              <Card padding="sm">
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="text-sm font-medium text-slate-500">Filtres :</span>
+
+                  <select
+                    value={statut ?? ''}
+                    onChange={(e) => setStatut(e.target.value || null)}
+                    className="rounded-lg bg-slate-50 px-3 py-1.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+                  >
+                    <option value="">Tous statuts</option>
+                    {statutOptions.map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={typeTicket ?? ''}
+                    onChange={(e) => setTypeTicket(e.target.value || null)}
+                    className="rounded-lg bg-slate-50 px-3 py-1.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+                  >
+                    <option value="">Tous types</option>
+                    {typeOptions.map((t) => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={groupe ?? ''}
+                    onChange={(e) => setGroupe(e.target.value || null)}
+                    className="rounded-lg bg-slate-50 px-3 py-1.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+                  >
+                    <option value="">Tous groupes</option>
+                    {groupOptions.map((g) => (
+                      <option key={g} value={g}>{g}</option>
+                    ))}
+                  </select>
+
+                  {(statut || typeTicket || groupe) && (
+                    <button
+                      onClick={resetFilters}
+                      className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm text-slate-500 hover:bg-slate-200 transition-colors"
+                    >
+                      Reinitialiser
+                    </button>
+                  )}
+                </div>
+              </Card>
+            </div>
+
+            {/* Category distribution */}
+            {catHook.data && catHook.data.nodes.length > 0 && (
+              <div className="animate-fade-slide-up animation-delay-300">
+                <Card>
+                  <h3 className="text-sm font-semibold font-[DM_Sans] text-slate-700 mb-3">
+                    {catHook.data.source === 'categorie' ? 'Repartition par categorie' : 'Repartition par groupe'}
+                  </h3>
+                  <CategoryBarChart tree={catHook.data} />
+                </Card>
+              </div>
+            )}
+
+            {/* Technician table */}
+            <div className="animate-fade-slide-up animation-delay-300 space-y-2">
+              <h2 className="text-lg font-semibold font-[DM_Sans] text-slate-700">Charge par technicien</h2>
+              {techHook.loading ? (
+                <div className="py-8 text-center text-sm text-slate-400">Chargement...</div>
+              ) : (
+                <TechnicianTable data={filteredTechs} />
+              )}
+            </div>
+          </>
         )}
 
-        {/* Technician table */}
-        <div className="animate-fade-slide-up animation-delay-300 space-y-2">
-          <h2 className="text-lg font-semibold font-[DM_Sans] text-slate-700">Charge par technicien</h2>
-          {techHook.loading ? (
-            <div className="py-8 text-center text-sm text-slate-400">Chargement...</div>
-          ) : (
-            <TechnicianTable data={filteredTechs} />
-          )}
-        </div>
-
-        {/* Attribution intelligente */}
-        <div className="animate-fade-slide-up animation-delay-300">
-          <AttributionSection />
-        </div>
+        {/* ── Onglet Attribution intelligente ── */}
+        {activeTab === 'attribution' && (
+          <div className="animate-fade-slide-up">
+            <AttributionSection />
+          </div>
+        )}
       </div>
 
       {/* Drawer tickets non assignés */}
