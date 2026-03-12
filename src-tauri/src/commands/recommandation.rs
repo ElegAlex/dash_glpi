@@ -3,12 +3,13 @@ use crate::state::AppState;
 use crate::db::queries::{
     get_active_import_id, get_profiling_tickets, get_unassigned_tickets_for_attribution,
     get_technician_stock_counts, get_cached_profiling, save_cached_profiling,
-    get_seuil_tickets,
+    get_seuil_tickets, get_unassigned_ticket_stats,
 };
 use crate::recommandation::profiling::{build_profiles, ProfilingTicket};
 use crate::recommandation::scoring::{score_tickets, UnassignedTicket};
 use crate::recommandation::types::{
     AssignmentRecommendation, CachedProfilingData, ProfilingResult, RecommendationRequest,
+    UnassignedTicketStats,
 };
 
 const PERIODE_PROFIL_MOIS: i64 = 6;
@@ -122,4 +123,19 @@ pub async fn get_assignment_recommendations(
     );
 
     Ok(results)
+}
+
+#[tauri::command]
+pub async fn get_unassigned_ticket_stats_cmd(
+    state: State<'_, AppState>,
+) -> Result<UnassignedTicketStats, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let conn = db.as_ref().ok_or("Base de données non initialisée")?;
+    let import_id = get_active_import_id(conn).map_err(|e| e.to_string())?;
+    let (count, age_moyen_jours) =
+        get_unassigned_ticket_stats(conn, import_id).map_err(|e| e.to_string())?;
+    Ok(UnassignedTicketStats {
+        count,
+        age_moyen_jours,
+    })
 }

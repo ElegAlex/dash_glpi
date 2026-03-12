@@ -166,6 +166,7 @@ pub fn run() {
             // Recommandation / Attribution
             commands::recommandation::build_technician_profiles,
             commands::recommandation::get_assignment_recommendations,
+            commands::recommandation::get_unassigned_ticket_stats_cmd,
         ])
         .run(tauri::generate_context!());
 

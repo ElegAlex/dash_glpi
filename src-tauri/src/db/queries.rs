@@ -1733,6 +1733,22 @@ pub(crate) fn save_cached_profiling(
     Ok(())
 }
 
+/// Get count and average age of unassigned vivant tickets.
+pub(crate) fn get_unassigned_ticket_stats(
+    conn: &Connection,
+    import_id: i64,
+) -> Result<(usize, f64), rusqlite::Error> {
+    conn.query_row(
+        "SELECT COUNT(*), COALESCE(AVG(anciennete_jours), 0)
+         FROM tickets
+         WHERE import_id = ?1
+           AND est_vivant = 1
+           AND (technicien_principal IS NULL OR technicien_principal = '')",
+        rusqlite::params![import_id],
+        |row| Ok((row.get::<_, usize>(0)?, row.get::<_, f64>(1)?)),
+    )
+}
+
 // ─── Tests Bilan temporel ─────────────────────────────────────────────────────
 
 #[cfg(test)]

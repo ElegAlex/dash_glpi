@@ -34,6 +34,13 @@ pub struct ProfilingResult {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct UnassignedTicketStats {
+    pub count: usize,
+    pub age_moyen_jours: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AssignmentRecommendation {
     pub ticket_id: i64,
     pub ticket_titre: String,

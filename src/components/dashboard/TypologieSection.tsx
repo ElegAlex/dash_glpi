@@ -112,7 +112,7 @@ function HorizontalBarChart({ data, limit = 10 }: { data: VentilationItem[]; lim
         axisPointer: { type: 'shadow' as const },
       },
       grid: {
-        left: 140,
+        left: 280,
         right: 30,
         top: 10,
         bottom: 20,
@@ -126,7 +126,7 @@ function HorizontalBarChart({ data, limit = 10 }: { data: VentilationItem[]; lim
         inverse: true,
         axisLabel: {
           fontSize: 10,
-          width: 120,
+          width: 260,
           overflow: 'truncate' as const,
         },
       },

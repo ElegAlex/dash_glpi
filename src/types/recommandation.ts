@@ -27,3 +27,8 @@ export interface RecommendationRequest {
     limitPerTicket?: number;
     scoreMinimum?: number;
 }
+
+export interface UnassignedTicketStats {
+    count: number;
+    ageMoyenJours: number;
+}
