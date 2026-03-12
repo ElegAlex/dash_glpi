@@ -6,6 +6,7 @@ import { useECharts } from '../hooks/useECharts';
 import { useFilterStore } from '../stores/filterStore';
 import { KpiCards } from '../components/stock/KpiCards';
 import { TechnicianTable } from '../components/stock/TechnicianTable';
+import { AttributionSection } from '../components/stock/AttributionSection';
 import { Card } from '../components/shared/Card';
 import type { StockOverview, TechnicianStats, CategoryTree, CategoryNode, TicketSummary, AgeRangeCount } from '../types/kpi';
 import type { EChartsCoreOption } from 'echarts/core';
@@ -435,6 +436,11 @@ function StockPage() {
           ) : (
             <TechnicianTable data={filteredTechs} />
           )}
+        </div>
+
+        {/* Attribution intelligente */}
+        <div className="animate-fade-slide-up animation-delay-300">
+          <AttributionSection />
         </div>
       </div>
 
