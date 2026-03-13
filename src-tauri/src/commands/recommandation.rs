@@ -12,8 +12,8 @@ use crate::recommandation::types::{
     UnassignedTicketStats,
 };
 
-const PERIODE_PROFIL_MOIS: i64 = 6;
-const MAX_UNASSIGNED_TICKETS: usize = 100;
+const PERIODE_PROFIL_MOIS: i64 = 3;
+const MAX_UNASSIGNED_TICKETS: usize = 500;
 
 #[tauri::command]
 pub async fn build_technician_profiles(
@@ -35,11 +35,15 @@ pub async fn build_technician_profiles(
     // Convert to profiling tickets
     let tickets: Vec<ProfilingTicket> = raw_tickets
         .into_iter()
-        .map(|(tech, titre, cat1, cat2)| ProfilingTicket {
+        .map(|(tech, titre, cat1, cat2, desc, sol, date_res, groupe)| ProfilingTicket {
             technicien: tech,
             titre,
             categorie_niveau1: cat1,
             categorie_niveau2: cat2,
+            description: desc,
+            solution: sol,
+            date_resolution: date_res,
+            groupe,
         })
         .collect();
 
@@ -95,11 +99,13 @@ pub async fn get_assignment_recommendations(
 
         let tickets: Vec<UnassignedTicket> = raw_tickets
             .into_iter()
-            .map(|(id, titre, cat1, cat2)| UnassignedTicket {
+            .map(|(id, titre, cat1, cat2, desc, groupe)| UnassignedTicket {
                 id,
                 titre,
                 categorie_niveau1: cat1,
                 categorie_niveau2: cat2,
+                description: desc,
+                groupe,
             })
             .collect();
 

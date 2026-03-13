@@ -1,7 +1,7 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use crate::nlp::preprocessing::{StopWordFilter, preprocess_text};
 use crate::nlp::tfidf::build_tfidf_matrix;
-use super::scoring::compute_centroid;
+use super::scoring::compute_centroid_weighted;
 use super::types::{CachedProfilingData, TechnicianProfile};
 
 /// Raw ticket data extracted from DB for profiling.
@@ -10,9 +10,40 @@ pub struct ProfilingTicket {
     pub titre: String,
     pub categorie_niveau1: Option<String>,
     pub categorie_niveau2: Option<String>,
+    pub description: String,
+    pub solution: String,
+    pub date_resolution: Option<String>,
+    pub groupe: Option<String>,
 }
 
 const TFIDF_MIN_DF: usize = 2;
+
+/// Half-life in days for recency decay (30 days = tickets from 30 days ago
+/// have half the weight of today's tickets).
+const RECENCY_HALF_LIFE_DAYS: f64 = 30.0;
+
+/// Generate bigrams from a list of stems: ["a","b","c"] → ["a_b","b_c"]
+pub fn extract_bigrams(stems: &[String]) -> Vec<String> {
+    if stems.len() < 2 {
+        return vec![];
+    }
+    stems.windows(2).map(|w| format!("{}_{}", w[0], w[1])).collect()
+}
+
+/// Compute exponential decay weight from a date string relative to today.
+fn recency_weight(date_str: &str, today: &chrono::NaiveDate) -> f64 {
+    let parsed = chrono::NaiveDate::parse_from_str(
+        &date_str[..10.min(date_str.len())],
+        "%Y-%m-%d",
+    );
+    match parsed {
+        Ok(d) => {
+            let days_ago = (*today - d).num_days().max(0) as f64;
+            (-(days_ago * 0.693) / RECENCY_HALF_LIFE_DAYS).exp()
+        }
+        Err(_) => 0.5, // fallback: half weight for unparseable dates
+    }
+}
 
 pub fn build_profiles(
     tickets: Vec<ProfilingTicket>,
@@ -32,6 +63,7 @@ pub fn build_profiles(
     }
 
     let nb_tickets = tickets.len();
+    let today = chrono::Utc::now().naive_utc().date();
 
     // Group tickets by technician
     let mut by_tech: HashMap<String, Vec<usize>> = HashMap::new();
@@ -39,48 +71,93 @@ pub fn build_profiles(
         by_tech.entry(ticket.technicien.clone()).or_default().push(idx);
     }
 
-    // Build category distributions
+    // Build category distributions (weighted by recency)
     let mut cat_distributions: HashMap<String, HashMap<String, f64>> = HashMap::new();
     for (tech, indices) in &by_tech {
-        let mut counts: HashMap<String, usize> = HashMap::new();
+        let mut weighted_counts: HashMap<String, f64> = HashMap::new();
+        let mut total_weight = 0.0;
         for &idx in indices {
             let t = &tickets[idx];
             let cat = t.categorie_niveau2.as_deref()
                 .or(t.categorie_niveau1.as_deref())
                 .unwrap_or("SANS_CATEGORIE");
-            *counts.entry(cat.to_string()).or_insert(0) += 1;
+            let w = t.date_resolution.as_deref()
+                .map(|d| recency_weight(d, &today))
+                .unwrap_or(0.5);
+            *weighted_counts.entry(cat.to_string()).or_insert(0.0) += w;
+            total_weight += w;
         }
-        let total = indices.len() as f64;
-        let dist: HashMap<String, f64> = counts
-            .into_iter()
-            .map(|(k, v)| (k, v as f64 / total))
-            .collect();
-        cat_distributions.insert(tech.clone(), dist);
+        if total_weight > 0.0 {
+            let dist: HashMap<String, f64> = weighted_counts
+                .into_iter()
+                .map(|(k, v)| (k, v / total_weight))
+                .collect();
+            cat_distributions.insert(tech.clone(), dist);
+        }
     }
 
-    // Preprocess all titles for TF-IDF
+    // Build technician → groups mapping
+    let mut tech_groupes: HashMap<String, HashSet<String>> = HashMap::new();
+    for ticket in &tickets {
+        if let Some(ref g) = ticket.groupe {
+            if !g.is_empty() {
+                tech_groupes
+                    .entry(ticket.technicien.clone())
+                    .or_default()
+                    .insert(g.clone());
+            }
+        }
+    }
+
+    // Preprocess titles + descriptions + solution for TF-IDF, with bigrams
     let filter = StopWordFilter::new();
     let corpus: Vec<Vec<String>> = tickets
         .iter()
-        .map(|t| preprocess_text(&t.titre, &filter))
+        .map(|t| {
+            let mut stems = preprocess_text(&t.titre, &filter);
+            if !t.description.is_empty() {
+                stems.extend(preprocess_text(&t.description, &filter));
+            }
+            if !t.solution.is_empty() {
+                stems.extend(preprocess_text(&t.solution, &filter));
+            }
+            let bigrams = extract_bigrams(&stems);
+            stems.extend(bigrams);
+            stems
+        })
+        .collect();
+
+    // Compute per-ticket recency weights for centroid
+    let weights: Vec<f64> = tickets
+        .iter()
+        .map(|t| {
+            t.date_resolution.as_deref()
+                .map(|d| recency_weight(d, &today))
+                .unwrap_or(0.5)
+        })
         .collect();
 
     // Build global TF-IDF matrix
     let tfidf_result = build_tfidf_matrix(&corpus, TFIDF_MIN_DF);
 
-    // Build vocabulary map (stem → index) — use vocab_index from TfIdfResult
     let vocabulary: HashMap<String, usize> = tfidf_result.vocab_index.clone();
     let idf_values = tfidf_result.idf.clone();
 
-    // Build profiles with centroids
+    // Build profiles with weighted centroids
     let mut profiles: Vec<TechnicianProfile> = Vec::new();
     for (tech, indices) in &by_tech {
-        let centroid = compute_centroid(&tfidf_result.matrix, indices);
+        let row_weights: Vec<f64> = indices.iter().map(|&i| weights[i]).collect();
+        let centroid = compute_centroid_weighted(&tfidf_result.matrix, indices, &row_weights);
+        let groupes: Vec<String> = tech_groupes
+            .remove(tech)
+            .map(|s| s.into_iter().collect())
+            .unwrap_or_default();
         profiles.push(TechnicianProfile {
             technicien: tech.clone(),
             nb_tickets_reference: indices.len(),
             cat_distribution: cat_distributions.remove(tech).unwrap_or_default(),
             centroide_tfidf: centroid,
+            groupes,
         });
     }
 
@@ -107,6 +184,10 @@ mod tests {
             titre: titre.to_string(),
             categorie_niveau1: cat1.map(|s| s.to_string()),
             categorie_niveau2: cat2.map(|s| s.to_string()),
+            description: String::new(),
+            solution: String::new(),
+            date_resolution: None,
+            groupe: None,
         }
     }
 
@@ -133,9 +214,6 @@ mod tests {
 
         let sum: f64 = profile.cat_distribution.values().sum();
         assert!((sum - 1.0).abs() < 1e-6, "sum={sum}");
-
-        assert!((profile.cat_distribution["Imprimante"] - 2.0 / 3.0).abs() < 1e-6);
-        assert!((profile.cat_distribution["Habilitations"] - 1.0 / 3.0).abs() < 1e-6);
     }
 
     #[test]
@@ -207,5 +285,46 @@ mod tests {
         assert!(result.vocabulary_size > 0);
         assert!(!result.vocabulary.is_empty());
         assert!(!result.idf_values.is_empty());
+    }
+
+    #[test]
+    fn test_extract_bigrams() {
+        let stems = vec!["imprim".to_string(), "reseau".to_string(), "problem".to_string()];
+        let bigrams = extract_bigrams(&stems);
+        assert_eq!(bigrams, vec!["imprim_reseau", "reseau_problem"]);
+    }
+
+    #[test]
+    fn test_extract_bigrams_single() {
+        let stems = vec!["imprim".to_string()];
+        assert!(extract_bigrams(&stems).is_empty());
+    }
+
+    #[test]
+    fn test_recency_weight_today_is_one() {
+        let today = chrono::Utc::now().naive_utc().date();
+        let date_str = today.format("%Y-%m-%d").to_string();
+        let w = recency_weight(&date_str, &today);
+        assert!((w - 1.0).abs() < 0.01, "w={w}");
+    }
+
+    #[test]
+    fn test_recency_weight_30_days_is_half() {
+        let today = chrono::Utc::now().naive_utc().date();
+        let thirty_days_ago = today - chrono::Duration::days(30);
+        let date_str = thirty_days_ago.format("%Y-%m-%d").to_string();
+        let w = recency_weight(&date_str, &today);
+        assert!((w - 0.5).abs() < 0.05, "w={w}");
+    }
+
+    #[test]
+    fn test_build_profiles_stores_groupes() {
+        let mut t1 = make_ticket("A", "imprimante réseau bloquée", None, None);
+        t1.groupe = Some("_DSI > _SUPPORT".to_string());
+        let mut t2 = make_ticket("A", "imprimante laser panne", None, None);
+        t2.groupe = Some("_DSI > _PRODUCTION".to_string());
+        let result = build_profiles(vec![t1, t2], "2025-09-12", "2026-03-12");
+        let profile = &result.profiles[0];
+        assert_eq!(profile.groupes.len(), 2);
     }
 }

@@ -10,13 +10,15 @@ pub struct UnassignedTicket {
     pub titre: String,
     pub categorie_niveau1: Option<String>,
     pub categorie_niveau2: Option<String>,
+    pub description: String,
+    pub groupe: Option<String>,
 }
 
 /// Stock count per technician (name → vivant ticket count).
 pub type TechnicianStockMap = HashMap<String, usize>;
 
-const POIDS_CATEGORIE: f64 = 0.4;
-const POIDS_TFIDF: f64 = 0.6;
+const POIDS_CATEGORIE: f64 = 0.7;
+const POIDS_TFIDF: f64 = 0.3;
 
 /// Cosine similarity between two L2-normalized sparse vectors.
 /// Inputs are assumed L2-normalized; divides by norms for correctness
@@ -66,6 +68,33 @@ pub fn compute_centroid(matrix: &CsMat<f64>, row_indices: &[usize]) -> Vec<(usiz
     }
 
     // L2-normalize
+    let norm: f64 = acc.values().map(|v| v * v).sum::<f64>().sqrt();
+    if norm == 0.0 {
+        return vec![];
+    }
+
+    let mut result: Vec<(usize, f64)> = acc.into_iter().map(|(k, v)| (k, v / norm)).collect();
+    result.sort_unstable_by_key(|(k, _)| *k);
+    result
+}
+
+/// Compute the L2-normalized weighted centroid of selected rows from a sparse matrix.
+/// Each row is multiplied by its corresponding weight before accumulation.
+pub fn compute_centroid_weighted(matrix: &CsMat<f64>, row_indices: &[usize], weights: &[f64]) -> Vec<(usize, f64)> {
+    if row_indices.is_empty() {
+        return vec![];
+    }
+
+    let mut acc: std::collections::HashMap<usize, f64> = std::collections::HashMap::new();
+    for (i, &row_idx) in row_indices.iter().enumerate() {
+        let w = weights.get(i).copied().unwrap_or(1.0);
+        if let Some(row) = matrix.outer_view(row_idx) {
+            for (&col, &val) in row.indices().iter().zip(row.data().iter()) {
+                *acc.entry(col).or_insert(0.0) += val * w;
+            }
+        }
+    }
+
     let norm: f64 = acc.values().map(|v| v * v).sum::<f64>().sqrt();
     if norm == 0.0 {
         return vec![];
@@ -142,12 +171,19 @@ pub fn score_tickets(
             .collect();
     }
 
+    use crate::recommandation::profiling::extract_bigrams;
+
     let filter = StopWordFilter::new();
 
     tickets
         .iter()
         .map(|ticket| {
-            let stems = preprocess_text(&ticket.titre, &filter);
+            let mut stems = preprocess_text(&ticket.titre, &filter);
+            if !ticket.description.is_empty() {
+                stems.extend(preprocess_text(&ticket.description, &filter));
+            }
+            let bigrams = extract_bigrams(&stems);
+            stems.extend(bigrams);
             let vec_ticket = project_to_vocabulary(
                 &stems,
                 &profiling_data.vocabulary,
@@ -162,9 +198,26 @@ pub fn score_tickets(
             let has_category = cat_ticket.is_some()
                 && cat_ticket != Some("SANS_CATEGORIE");
 
+            // Group filtering: if ticket has a group, prefer technicians from that group
+            let ticket_groupe = ticket.groupe.as_deref().filter(|g| !g.is_empty());
+            let group_techs: Option<Vec<&str>> = ticket_groupe.and_then(|g| {
+                let members: Vec<&str> = profiling_data.profiles.iter()
+                    .filter(|p| p.groupes.iter().any(|pg| pg == g))
+                    .map(|p| p.technicien.as_str())
+                    .collect();
+                if members.is_empty() { None } else { Some(members) }
+            });
+
             let mut suggestions: Vec<TechnicianSuggestion> = profiling_data
                 .profiles
                 .iter()
+                .filter(|profile| {
+                    // If we have group members, only score those
+                    match &group_techs {
+                        Some(members) => members.contains(&profile.technicien.as_str()),
+                        None => true,
+                    }
+                })
                 .map(|profile| {
                     let score_tfidf =
                         cosine_similarity_sparse(&vec_ticket, &profile.centroide_tfidf);
@@ -342,12 +395,14 @@ mod tests {
                     nb_tickets_reference: 50,
                     cat_distribution: cat_dupont,
                     centroide_tfidf: vec![(0, 0.8), (1, 0.6)],
+                    groupes: vec!["_DSI > _SUPPORT".to_string()],
                 },
                 TechnicianProfile {
                     technicien: "Leroy".to_string(),
                     nb_tickets_reference: 30,
                     cat_distribution: cat_leroy,
                     centroide_tfidf: vec![(2, 0.7), (3, 0.7)],
+                    groupes: vec!["_DSI > _SUPPORT".to_string()],
                 },
             ],
             vocabulary: vocab,
@@ -367,6 +422,8 @@ mod tests {
             titre: "imprimante réseau bloquée".to_string(),
             categorie_niveau1: Some("Matériel".to_string()),
             categorie_niveau2: Some("Imprimante".to_string()),
+            description: String::new(),
+            groupe: None,
         }];
         let mut stock = HashMap::new();
         stock.insert("Dupont".to_string(), 10_usize);
@@ -386,6 +443,8 @@ mod tests {
             titre: "accès SAP refusé nouvel agent".to_string(),
             categorie_niveau1: Some("Habilitations".to_string()),
             categorie_niveau2: None,
+            description: String::new(),
+            groupe: None,
         }];
         let mut stock = HashMap::new();
         stock.insert("Dupont".to_string(), 10_usize);
@@ -403,6 +462,8 @@ mod tests {
             titre: "imprimante réseau bloquée".to_string(),
             categorie_niveau1: Some("Matériel".to_string()),
             categorie_niveau2: Some("Imprimante".to_string()),
+            description: String::new(),
+            groupe: None,
         }];
         let mut stock = HashMap::new();
         stock.insert("Dupont".to_string(), 60_usize);
@@ -422,6 +483,8 @@ mod tests {
             titre: "imprimante réseau bloquée".to_string(),
             categorie_niveau1: None,
             categorie_niveau2: None,
+            description: String::new(),
+            groupe: None,
         }];
         let mut stock = HashMap::new();
         stock.insert("Dupont".to_string(), 10_usize);
@@ -440,6 +503,8 @@ mod tests {
             titre: "test".to_string(),
             categorie_niveau1: None,
             categorie_niveau2: None,
+            description: String::new(),
+            groupe: None,
         }];
         let stock = HashMap::new();
         let results = score_tickets(&tickets, &data, &stock, 20.0, 1, 0.0);
@@ -454,6 +519,8 @@ mod tests {
             titre: "quelque chose de totalement inconnu zzzzz".to_string(),
             categorie_niveau1: Some("CatégorieInexistante".to_string()),
             categorie_niveau2: None,
+            description: String::new(),
+            groupe: None,
         }];
         let stock = HashMap::new();
         let results = score_tickets(&tickets, &data, &stock, 20.0, 3, 0.99);

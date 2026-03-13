@@ -8,6 +8,7 @@ pub struct TechnicianProfile {
     pub nb_tickets_reference: usize,
     pub cat_distribution: HashMap<String, f64>,
     pub centroide_tfidf: Vec<(usize, f64)>,
+    pub groupes: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -72,7 +73,7 @@ impl RecommendationRequest {
         self.limit_per_ticket.unwrap_or(3)
     }
     pub fn min_score(&self) -> f64 {
-        self.score_minimum.unwrap_or(0.05)
+        self.score_minimum.unwrap_or(0.01)
     }
 }
 

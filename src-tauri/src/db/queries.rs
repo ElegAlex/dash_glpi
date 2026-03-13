@@ -1609,11 +1609,12 @@ mod tests {
 // ─── Fonctions Recommandation / Profiling ─────────────────────────────────────
 
 /// Fetch resolved tickets from the last N months for profiling.
+/// Row: (technicien, titre, cat1, cat2, description, solution, date_resolution, groupe_principal)
 pub(crate) fn get_profiling_tickets(
     conn: &Connection,
     import_id: i64,
     months_back: i64,
-) -> Result<Vec<(String, String, Option<String>, Option<String>)>, rusqlite::Error> {
+) -> Result<Vec<(String, String, Option<String>, Option<String>, String, String, Option<String>, Option<String>)>, rusqlite::Error> {
     let date_cutoff = chrono::Utc::now()
         .naive_utc()
         .date()
@@ -1623,7 +1624,10 @@ pub(crate) fn get_profiling_tickets(
         .to_string();
 
     let mut stmt = conn.prepare(
-        "SELECT technicien_principal, titre, categorie_niveau1, categorie_niveau2
+        "SELECT technicien_principal, titre, categorie_niveau1, categorie_niveau2,
+                suivis_description, solution,
+                COALESCE(date_resolution, date_cloture_approx, derniere_modification),
+                groupe_principal
          FROM tickets
          WHERE import_id = ?1
            AND est_vivant = 0
@@ -1637,6 +1641,10 @@ pub(crate) fn get_profiling_tickets(
             row.get::<_, String>(1)?,
             row.get::<_, Option<String>>(2)?,
             row.get::<_, Option<String>>(3)?,
+            row.get::<_, String>(4)?,
+            row.get::<_, String>(5)?,
+            row.get::<_, Option<String>>(6)?,
+            row.get::<_, Option<String>>(7)?,
         ))
     })?;
 
@@ -1644,13 +1652,14 @@ pub(crate) fn get_profiling_tickets(
 }
 
 /// Fetch unassigned vivant tickets for attribution, ordered by ancienneté DESC, limited.
+/// Row: (id, titre, cat1, cat2, description, groupe_principal)
 pub(crate) fn get_unassigned_tickets_for_attribution(
     conn: &Connection,
     import_id: i64,
     limit: usize,
-) -> Result<Vec<(i64, String, Option<String>, Option<String>)>, rusqlite::Error> {
+) -> Result<Vec<(i64, String, Option<String>, Option<String>, String, Option<String>)>, rusqlite::Error> {
     let mut stmt = conn.prepare(
-        "SELECT id, titre, categorie_niveau1, categorie_niveau2
+        "SELECT id, titre, categorie_niveau1, categorie_niveau2, suivis_description, groupe_principal
          FROM tickets
          WHERE import_id = ?1
            AND est_vivant = 1
@@ -1665,6 +1674,8 @@ pub(crate) fn get_unassigned_tickets_for_attribution(
             row.get::<_, String>(1)?,
             row.get::<_, Option<String>>(2)?,
             row.get::<_, Option<String>>(3)?,
+            row.get::<_, String>(4)?,
+            row.get::<_, Option<String>>(5)?,
         ))
     })?;
 
